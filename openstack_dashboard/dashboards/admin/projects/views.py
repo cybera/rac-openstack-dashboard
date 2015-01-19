@@ -82,6 +82,8 @@ class IndexView(tables.DataTableView):
                 domain=domain_context,
                 paginate=True,
                 marker=marker)
+            # JT - change sort in /admin/projects
+            tenants.sort(key=lambda x: x.name.lower())
         except Exception:
             self._more = False
             exceptions.handle(self.request,
