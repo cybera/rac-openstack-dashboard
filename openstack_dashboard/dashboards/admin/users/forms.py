@@ -41,7 +41,10 @@ class BaseUserForm(forms.SelfHandlingForm):
         super(BaseUserForm, self).__init__(request, *args, **kwargs)
 
         # Populate project choices
-        project_choices = []
+        # JT
+        #project_choices = []
+        project_header = [('', _("Select a project"))]
+        project_choices= []
 
         # If the user is already set (update action), list only projects which
         # the user has access to.
@@ -57,6 +60,8 @@ class BaseUserForm(forms.SelfHandlingForm):
             project_choices.insert(0, ('', _("No available projects")))
         elif len(project_choices) > 1:
             project_choices.insert(0, ('', _("Select a project")))
+        # JT
+        project_choices.sort(key=lambda x: x[1])
         self.fields['project'].choices = project_choices
 
     def clean(self):
