@@ -23,8 +23,9 @@ from openstack_auth import forms
 
 
 def get_user_home(user):
-    if user.is_superuser:
-        return horizon.get_dashboard('admin').get_absolute_url()
+    # JT
+    #if user.is_superuser:
+    #    return horizon.get_dashboard('admin').get_absolute_url()
     return horizon.get_dashboard('project').get_absolute_url()
 
 
