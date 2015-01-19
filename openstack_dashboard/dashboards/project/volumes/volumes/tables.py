@@ -100,7 +100,9 @@ class ExtendVolume(tables.LinkAction):
         return {"project_id": project_id}
 
     def allowed(self, request, volume=None):
-        return volume.status == "available"
+        # JT
+        #return volume.status == "available"
+        return False
 
 
 class EditAttachments(tables.LinkAction):
