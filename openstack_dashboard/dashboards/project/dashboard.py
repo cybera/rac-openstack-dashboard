@@ -28,6 +28,10 @@ class BasePanels(horizon.PanelGroup):
               'images',
               'access_and_security',)
 
+class RACUsagePanels(horizon.PanelGroup):
+    slug = "rac_usage"
+    name = "RAC Usage"
+    panels = ('rac_usage',)
 
 class NetworkPanels(horizon.PanelGroup):
     slug = "network"
@@ -67,6 +71,7 @@ class Project(horizon.Dashboard):
         NetworkPanels,
         ObjectStorePanels,
         OrchestrationPanels,
+        RACUsagePanels,
         DatabasePanels,)
     default_panel = 'overview'
     supports_tenants = True

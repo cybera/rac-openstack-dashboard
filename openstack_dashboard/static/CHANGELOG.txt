@@ -1,0 +1,22 @@
+Please contact rac-admin@cybera.ca if you have any questions or would like
+further details.
+
+## February 20, 2015
+
+Enabled users to run nova diagnostics. This command allows users to see
+statistics on their instance.
+
+  * http://docs.openstack.org/admin-guide-cloud/content/instance_usage_statistics.html
+
+## January 15, 2015
+
+New base images available.
+
+Helper scripts have been added to Ubuntu and CentOS images that allow users to
+easily modify the images for additional functionality such as enabling security
+auto updates, installing OpenStack tools, and enabling local software updates.
+Documentation can be found in the motd message, the quickstart guide, and the
+CLI lab:
+
+  * http://bit.ly/RAC_Quickstart
+  * http://bit.ly/RAC_CLI_Lab
