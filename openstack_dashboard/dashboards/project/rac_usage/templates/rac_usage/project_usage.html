@@ -15,11 +15,11 @@
 
 {% for query_title, query in queries %}
 <h3>{{ query_title }}</h3>
-<img src="project_data?query={{ query }}">
+<img src="project_data?query={{ query }}&from={{ request.GET.from }}">
 <br>
 <br>
-(<a href="project_data?query={{ query }}&format=json">JSON</a>)
-(<a href="project_data?query={{ query }}&format=csv">CSV</a>)
+(<a href="project_data?query={{ query }}&from={{ request.GET.from }}&format=json">JSON</a>)
+(<a href="project_data?query={{ query }}&from={{ request.GET.from }}&format=csv">CSV</a>)
 <br>
 <hr>
 {% endfor %}
