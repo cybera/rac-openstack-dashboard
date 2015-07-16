@@ -311,6 +311,8 @@ class DeleteObject(tables.DeleteAction):
     name = "delete_object"
     data_type_singular = _("Object")
     data_type_plural = _("Objects")
+    # jt
+    #allowed_data_types = ("objects",)
     allowed_data_types = ("objects", "subfolders",)
 
     def delete(self, request, obj_id):
