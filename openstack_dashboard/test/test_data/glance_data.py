@@ -17,9 +17,24 @@ from glanceclient.v1 import images
 from openstack_dashboard.test.test_data import utils
 
 
+class Namespace(dict):
+    def __repr__(self):
+        return "<Namespace %s>" % self._info
+
+    def __init__(self, info):
+        super(Namespace, self).__init__()
+        self.__dict__.update(info)
+        self.update(info)
+        self._info = info
+
+    def as_json(self, indent=4):
+        return self.__dict__
+
+
 def data(TEST):
     TEST.images = utils.TestDataContainer()
     TEST.snapshots = utils.TestDataContainer()
+    TEST.metadata_defs = utils.TestDataContainer()
 
     # Snapshots
     snapshot_dict = {'name': u'snapshot',
@@ -56,27 +71,32 @@ def data(TEST):
     # Images
     image_dict = {'id': '007e7d55-fe1e-4c5c-bf08-44b4a4964822',
                   'name': 'public_image',
+                  'disk_format': u'qcow2',
                   'status': "active",
                   'size': 20 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'novaImage',
                   'properties': {'image_type': u'image'},
                   'is_public': True,
                   'protected': False,
-                  'min_ram': 0}
+                  'min_ram': 0,
+                  'created_at': '2014-02-14T20:56:53'}
     public_image = images.Image(images.ImageManager(None), image_dict)
 
     image_dict = {'id': 'a001c047-22f8-47d0-80a1-8ec94a9524fe',
                   'name': 'private_image',
                   'status': "active",
                   'size': 10 * 1024 ** 2,
+                  'virtual_size': 20 * 1024 ** 2,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'aki',
                   'is_public': False,
                   'protected': False,
-                  'min_ram': 0}
+                  'min_ram': 0,
+                  'created_at': '2014-03-14T12:56:53'}
     private_image = images.Image(images.ImageManager(None), image_dict)
 
     image_dict = {'id': 'd6936c86-7fec-474a-85c5-5e467b371c3c',
@@ -84,18 +104,21 @@ def data(TEST):
                   'status': "active",
                   'owner': TEST.tenant.id,
                   'size': 2 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 30,
                   'container_format': 'novaImage',
                   'properties': {'image_type': u'image'},
                   'is_public': True,
                   'protected': True,
-                  'min_ram': 0}
+                  'min_ram': 0,
+                  'created_at': '2014-03-16T06:22:14'}
     protected_image = images.Image(images.ImageManager(None), image_dict)
 
     image_dict = {'id': '278905a6-4b52-4d1e-98f9-8c57bb25ba32',
                   'name': None,
                   'status': "active",
                   'size': 5 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'novaImage',
@@ -109,6 +132,7 @@ def data(TEST):
                   'name': 'private_image 2',
                   'status': "active",
                   'size': 30 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'aki',
@@ -121,6 +145,7 @@ def data(TEST):
                   'name': 'private_image 3',
                   'status': "active",
                   'size': 2 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'aki',
@@ -134,6 +159,7 @@ def data(TEST):
                   'name': 'shared_image 1',
                   'status': "active",
                   'size': 8 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': 'someothertenant',
                   'container_format': 'aki',
@@ -148,6 +174,7 @@ def data(TEST):
                   'name': 'official_image 1',
                   'status': "active",
                   'size': 2 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': 'officialtenant',
                   'container_format': 'aki',
@@ -160,6 +187,7 @@ def data(TEST):
                   'name': 'multi_prop_image',
                   'status': "active",
                   'size': 20 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': TEST.tenant.id,
                   'container_format': 'novaImage',
@@ -170,10 +198,11 @@ def data(TEST):
                   'protected': False}
     multi_prop_image = images.Image(images.ImageManager(None), image_dict)
 
-    # An image wihout name being returned based on current api
+    # An image without name being returned based on current api
     image_dict = {'id': 'c8756975-7a3b-4e43-b7f7-433576112849',
                   'status': "active",
                   'size': 8 * 1024 ** 3,
+                  'virtual_size': None,
                   'min_disk': 0,
                   'owner': 'someothertenant',
                   'container_format': 'aki',
@@ -186,3 +215,107 @@ def data(TEST):
                     shared_image1, official_image1, multi_prop_image)
 
     TEST.empty_name_image = no_name_image
+
+    metadef_dict = {
+        'namespace': 'namespace_1',
+        'display_name': 'Namespace 1',
+        'description': 'Mock desc 1',
+        'resource_type_associations': [
+            {
+                'created_at': '2014-08-21T08:39:43Z',
+                'prefix': 'mock',
+                'name': 'mock name'
+            }
+        ],
+        'visibility': 'public',
+        'protected': True,
+        'created_at': '2014-08-21T08:39:43Z',
+        'properties': {
+            'cpu_mock:mock': {
+                'default': '1',
+                'type': 'integer',
+                'description': 'Number of mocks.',
+                'title': 'mocks'
+            }
+        }
+    }
+    metadef = Namespace(metadef_dict)
+    TEST.metadata_defs.add(metadef)
+
+    metadef_dict = {
+        'namespace': 'namespace_2',
+        'display_name': 'Namespace 2',
+        'description': 'Mock desc 2',
+        'resource_type_associations': [
+            {
+                'created_at': '2014-08-21T08:39:43Z',
+                'prefix': 'mock',
+                'name': 'mock name'
+            }
+        ],
+        'visibility': 'private',
+        'protected': False,
+        'created_at': '2014-08-21T08:39:43Z',
+        'properties': {
+            'hdd_mock:mock': {
+                'default': '2',
+                'type': 'integer',
+                'description': 'Number of mocks.',
+                'title': 'mocks'
+            }
+        }
+    }
+    metadef = Namespace(metadef_dict)
+    TEST.metadata_defs.add(metadef)
+
+    metadef_dict = {
+        'namespace': 'namespace_3',
+        'display_name': 'Namespace 3',
+        'description': 'Mock desc 3',
+        'resource_type_associations': [
+            {
+                'created_at': '2014-08-21T08:39:43Z',
+                'prefix': 'mock',
+                'name': 'mock name'
+            }
+        ],
+        'visibility': 'public',
+        'protected': False,
+        'created_at': '2014-08-21T08:39:43Z',
+        'properties': {
+            'gpu_mock:mock': {
+                'default': '2',
+                'type': 'integer',
+                'description': 'Number of mocks.',
+                'title': 'mocks'
+            }
+        }
+    }
+    metadef = Namespace(metadef_dict)
+    TEST.metadata_defs.add(metadef)
+
+    metadef_dict = {
+        'namespace': 'namespace_4',
+        'display_name': 'Namespace 4',
+        'description': 'Mock desc 4',
+        'resource_type_associations': [
+            {
+                'created_at': '2014-08-21T08:39:43Z',
+                'prefix': 'mock',
+                'name': 'mock name'
+            }
+        ],
+        'visibility': 'public',
+        'protected': True,
+        'created_at': '2014-08-21T08:39:43Z',
+        'properties': {
+            'ram_mock:mock': {
+                'default': '2',
+                'type': 'integer',
+                'description': 'Number of mocks.',
+                'title': 'mocks'
+            }
+        }
+    }
+    metadef = Namespace(metadef_dict)
+    TEST.metadata_defs.add(metadef)

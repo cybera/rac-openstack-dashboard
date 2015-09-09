@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012,  Nachi Ueno,  NTT MCL,  Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -16,12 +14,20 @@
 
 from django.utils.translation import ugettext_lazy as _
 
-from horizon import exceptions
 from horizon import tabs
-from openstack_dashboard import api
+
 from openstack_dashboard.dashboards.project.routers.extensions.routerrules\
     import tabs as rr_tabs
 from openstack_dashboard.dashboards.project.routers.ports import tables as ptbl
+
+
+class OverviewTab(tabs.Tab):
+    name = _("Overview")
+    slug = "overview"
+    template_name = "project/routers/_detail_overview.html"
+
+    def get_context_data(self, request):
+        return {"router": self.tab_group.kwargs['router']}
 
 
 class InterfacesTab(tabs.TableTab):
@@ -31,28 +37,11 @@ class InterfacesTab(tabs.TableTab):
     template_name = "horizon/common/_detail_table.html"
 
     def get_interfaces_data(self):
-        ports = self.tab_group.ports
-        for p in ports:
-            p.set_id_as_name_if_empty()
-        return ports
+        return self.tab_group.kwargs['ports']
 
 
 class RouterDetailTabs(tabs.TabGroup):
     slug = "router_details"
-    tabs = (InterfacesTab, rr_tabs.RulesGridTab, rr_tabs.RouterRulesTab)
+    tabs = (OverviewTab, InterfacesTab, rr_tabs.RulesGridTab,
+            rr_tabs.RouterRulesTab)
     sticky = True
-
-    def __init__(self, request, **kwargs):
-        rid = kwargs['router_id']
-        self.router = {}
-        if 'router' in kwargs:
-            self.router = kwargs['router']
-        else:
-            self.router = api.neutron.router_get(request, rid)
-        try:
-            self.ports = api.neutron.port_list(request, device_id=rid)
-        except Exception:
-            self.ports = []
-            msg = _('Unable to retrieve router details.')
-            exceptions.handle(request, msg)
-        super(RouterDetailTabs, self).__init__(request, **kwargs)

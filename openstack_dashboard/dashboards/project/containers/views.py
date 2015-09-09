@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -22,10 +20,11 @@
 Views for managing Swift containers.
 """
 
-from django.core.urlresolvers import reverse
+import os
+
+import django
 from django import http
 from django.utils.functional import cached_property  # noqa
-from django.utils import http as utils_http
 from django.utils.translation import ugettext_lazy as _
 from django.views import generic
 
@@ -33,6 +32,7 @@ from horizon import browsers
 from horizon import exceptions
 from horizon import forms
 from horizon.utils import memoized
+from horizon.utils.urlresolvers import reverse  # noqa
 
 from openstack_dashboard import api
 from openstack_dashboard.api import swift
@@ -40,19 +40,7 @@ from openstack_dashboard.dashboards.project.containers \
     import browsers as project_browsers
 from openstack_dashboard.dashboards.project.containers \
     import forms as project_forms
-from openstack_dashboard.dashboards.project.containers import tables
-
-import os
-
-
-def for_url(container_name):
-    """Build a URL friendly container name.
-
-    Add Swift delimiter if necessary.
-    The name can contain '%' (bug 1231904).
-    """
-    container_name = tables.wrap_delimiter(container_name)
-    return utils_http.urlquote(container_name)
+from openstack_dashboard.dashboards.project.containers import utils
 
 
 class ContainerView(browsers.ResourceBrowserView):
@@ -139,16 +127,18 @@ class CreateView(forms.ModalFormView):
     form_class = project_forms.CreateContainer
     template_name = 'project/containers/create.html'
     success_url = "horizon:project:containers:index"
+    page_title = _("Create Container")
 
     def get_success_url(self):
         parent = self.request.POST.get('parent', None)
         if parent:
             container, slash, remainder = parent.partition(
                 swift.FOLDER_DELIMITER)
-            args = (for_url(container), for_url(remainder))
+            args = (utils.wrap_delimiter(container),
+                    utils.wrap_delimiter(remainder))
             return reverse(self.success_url, args=args)
         else:
-            container = for_url(self.request.POST['name'])
+            container = utils.wrap_delimiter(self.request.POST['name'])
             return reverse(self.success_url, args=[container])
 
     def get_initial(self):
@@ -161,11 +151,12 @@ class CreatePseudoFolderView(forms.ModalFormView):
     form_class = project_forms.CreatePseudoFolder
     template_name = 'project/containers/create_pseudo_folder.html'
     success_url = "horizon:project:containers:index"
+    page_title = _("Create Pseudo-folder")
 
     def get_success_url(self):
         container_name = self.request.POST['container_name']
         return reverse(self.success_url,
-                       args=(tables.wrap_delimiter(container_name),
+                       args=(utils.wrap_delimiter(container_name),
                              self.request.POST.get('path', '')))
 
     def get_initial(self):
@@ -183,11 +174,12 @@ class UploadView(forms.ModalFormView):
     form_class = project_forms.UploadObject
     template_name = 'project/containers/upload.html'
     success_url = "horizon:project:containers:index"
+    page_title = _("Upload Objects")
 
     def get_success_url(self):
-        container_name = for_url(self.request.POST['container_name'])
-        path = for_url(self.request.POST.get('path', ''))
-        args = (container_name, path)
+        container = utils.wrap_delimiter(self.request.POST['container_name'])
+        path = utils.wrap_delimiter(self.request.POST.get('path', ''))
+        args = (container, path)
         return reverse(self.success_url, args=args)
 
     def get_initial(self):
@@ -196,14 +188,14 @@ class UploadView(forms.ModalFormView):
 
     def get_context_data(self, **kwargs):
         context = super(UploadView, self).get_context_data(**kwargs)
-        container_name = utils_http.urlquote(self.kwargs["container_name"])
-        context['container_name'] = container_name
+        context['container_name'] = self.kwargs["container_name"]
         return context
 
 
 def object_download(request, container_name, object_path):
     try:
-        obj = api.swift.swift_get_object(request, container_name, object_path)
+        obj = api.swift.swift_get_object(request, container_name, object_path,
+                                         resp_chunk_size=swift.CHUNK_SIZE)
     except Exception:
         redirect = reverse("horizon:project:containers:index")
         exceptions.handle(request,
@@ -215,11 +207,18 @@ def object_download(request, container_name, object_path):
     if not os.path.splitext(obj.name)[1] and obj.orig_name:
         name, ext = os.path.splitext(obj.orig_name)
         filename = "%s%s" % (filename, ext)
-    response = http.HttpResponse()
+    # NOTE(tsufiev): StreamingHttpResponse class had been introduced in
+    # Django 1.5 specifically for the purpose streaming and/or transferring
+    # large files, it's less fragile than standard HttpResponse and should be
+    # used when available.
+    if django.VERSION >= (1, 5):
+        response = http.StreamingHttpResponse(obj.data)
+    else:
+        response = http.HttpResponse(obj.data)
     safe_name = filename.replace(",", "").encode('utf-8')
     response['Content-Disposition'] = 'attachment; filename="%s"' % safe_name
     response['Content-Type'] = 'application/octet-stream'
-    response.write(obj.data)
+    response['Content-Length'] = obj.bytes
     return response
 
 
@@ -227,11 +226,13 @@ class CopyView(forms.ModalFormView):
     form_class = project_forms.CopyObject
     template_name = 'project/containers/copy.html'
     success_url = "horizon:project:containers:index"
+    page_title = _("Copy Object")
 
     def get_success_url(self):
-        new_container_name = for_url(self.request.POST['new_container_name'])
-        path = for_url(self.request.POST.get('path', ''))
-        args = (new_container_name, path)
+        container = utils.wrap_delimiter(
+            self.request.POST['new_container_name'])
+        path = utils.wrap_delimiter(self.request.POST.get('path', ''))
+        args = (container, path)
         return reverse(self.success_url, args=args)
 
     def get_form_kwargs(self):
@@ -246,25 +247,32 @@ class CopyView(forms.ModalFormView):
         kwargs['containers'] = [(c.name, c.name) for c in containers[0]]
         return kwargs
 
+    @staticmethod
+    def get_copy_name(object_name):
+        filename, ext = os.path.splitext(object_name)
+        return "%s.copy%s" % (filename, ext)
+
     def get_initial(self):
         path = self.kwargs["subfolder_path"]
-        orig = "%s%s" % (path or '', self.kwargs["object_name"])
+        object_name = self.kwargs["object_name"]
+        orig = "%s%s" % (path or '', object_name)
+
         return {"new_container_name": self.kwargs["container_name"],
                 "orig_container_name": self.kwargs["container_name"],
                 "orig_object_name": orig,
                 "path": path,
-                "new_object_name": "%s copy" % self.kwargs["object_name"]}
+                "new_object_name": self.get_copy_name(object_name)}
 
     def get_context_data(self, **kwargs):
         context = super(CopyView, self).get_context_data(**kwargs)
-        container_name = utils_http.urlquote(self.kwargs["container_name"])
-        context['container_name'] = container_name
+        context['container_name'] = self.kwargs["container_name"]
         context['object_name'] = self.kwargs["object_name"]
         return context
 
 
 class ContainerDetailView(forms.ModalFormMixin, generic.TemplateView):
     template_name = 'project/containers/container_detail.html'
+    page_title = _("Container Details")
 
     @memoized.memoized_method
     def get_object(self):
@@ -287,6 +295,7 @@ class ContainerDetailView(forms.ModalFormMixin, generic.TemplateView):
 
 class ObjectDetailView(forms.ModalFormMixin, generic.TemplateView):
     template_name = 'project/containers/object_detail.html'
+    page_title = _("Object Details")
 
     @memoized.memoized_method
     def get_object(self):
@@ -312,11 +321,12 @@ class UpdateObjectView(forms.ModalFormView):
     form_class = project_forms.UpdateObject
     template_name = 'project/containers/update.html'
     success_url = "horizon:project:containers:index"
+    page_title = _("Update Object")
 
     def get_success_url(self):
-        container_name = for_url(self.request.POST['container_name'])
-        path = for_url(self.request.POST.get('path', ''))
-        args = (container_name, path)
+        container = utils.wrap_delimiter(self.request.POST['container_name'])
+        path = utils.wrap_delimiter(self.request.POST.get('path', ''))
+        args = (container, path)
         return reverse(self.success_url, args=args)
 
     def get_initial(self):
@@ -326,10 +336,7 @@ class UpdateObjectView(forms.ModalFormView):
 
     def get_context_data(self, **kwargs):
         context = super(UpdateObjectView, self).get_context_data(**kwargs)
-        context['container_name'] = utils_http.urlquote(
-            self.kwargs["container_name"])
-        context['subfolder_path'] = utils_http.urlquote(
-            self.kwargs["subfolder_path"])
-        context['object_name'] = utils_http.urlquote(
-            self.kwargs["object_name"])
+        context['container_name'] = self.kwargs["container_name"]
+        context['subfolder_path'] = self.kwargs["subfolder_path"]
+        context['object_name'] = self.kwargs["object_name"]
         return context

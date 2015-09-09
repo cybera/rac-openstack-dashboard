@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 #    Copyright 2013, Big Switch Networks, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -17,6 +15,9 @@
 from __future__ import absolute_import
 
 from django.utils.datastructures import SortedDict
+from django.utils.translation import ugettext_lazy as _
+
+from horizon import messages
 
 from openstack_dashboard.api import neutron
 
@@ -96,7 +97,15 @@ def vip_list(request, **kwargs):
 
 
 def vip_get(request, vip_id):
+    return _vip_get(request, vip_id, expand_resource=True)
+
+
+def _vip_get(request, vip_id, expand_resource=False):
     vip = neutronclient(request).show_vip(vip_id).get('vip')
+    if expand_resource:
+        vip['subnet'] = neutron.subnet_get(request, vip['subnet_id'])
+        vip['port'] = neutron.port_get(request, vip['port_id'])
+        vip['pool'] = _pool_get(request, vip['pool_id'])
     return Vip(vip)
 
 
@@ -132,15 +141,20 @@ def pool_create(request, **kwargs):
     return Pool(pool)
 
 
-def _get_vip_name(request, pool, vip_dict):
+def _get_vip(request, pool, vip_dict, expand_name_only=False):
     if pool['vip_id'] is not None:
         try:
             if vip_dict:
-                return vip_dict.get(pool['vip_id']).name
+                vip = vip_dict.get(pool['vip_id'])
             else:
-                return vip_get(request, pool['vip_id']).name
+                vip = _vip_get(request, pool['vip_id'])
         except Exception:
-            return pool['vip_id']
+            messages.warning(request, _("Unable to get VIP for pool "
+                                        "%(pool)s.") % {"pool": pool["id"]})
+            vip = Vip({'id': pool['vip_id'], 'name': ''})
+        if expand_name_only:
+            vip = vip.name_or_id
+        return vip
     else:
         return None
 
@@ -155,26 +169,59 @@ def _pool_list(request, expand_subnet=False, expand_vip=False, **kwargs):
         subnets = neutron.subnet_list(request)
         subnet_dict = SortedDict((s.id, s) for s in subnets)
         for p in pools:
-            p['subnet_name'] = subnet_dict.get(p['subnet_id']).cidr
+            subnet = subnet_dict.get(p['subnet_id'])
+            p['subnet_name'] = subnet.cidr if subnet else None
     if expand_vip:
         vips = vip_list(request)
         vip_dict = SortedDict((v.id, v) for v in vips)
         for p in pools:
-            p['vip_name'] = _get_vip_name(request, p, vip_dict)
+            p['vip_name'] = _get_vip(request, p, vip_dict,
+                                     expand_name_only=True)
     return [Pool(p) for p in pools]
 
 
 def pool_get(request, pool_id):
-    return _pool_get(request, pool_id, expand_subnet=True, expand_vip=True)
+    return _pool_get(request, pool_id, expand_resource=True)
 
 
-def _pool_get(request, pool_id, expand_subnet=False, expand_vip=False):
-    pool = neutronclient(request).show_pool(pool_id).get('pool')
-    if expand_subnet:
-        pool['subnet_name'] = neutron.subnet_get(request,
-                                                 pool['subnet_id']).cidr
-    if expand_vip:
-        pool['vip_name'] = _get_vip_name(request, pool, vip_dict=False)
+def _pool_get(request, pool_id, expand_resource=False):
+    try:
+        pool = neutronclient(request).show_pool(pool_id).get('pool')
+    except Exception:
+        messages.warning(request, _("Unable to get pool detail."))
+        return None
+    if expand_resource:
+        # TODO(lyj): The expand resource(subnet, member etc.) attached
+        # to a pool could be deleted without cleanup pool related database,
+        # this will cause exceptions if we trying to get the deleted resources.
+        # so we need to handle the situation by showing a warning message here.
+        # we can safely remove the try/except once the neutron bug is fixed
+        # https://bugs.launchpad.net/neutron/+bug/1406854
+        try:
+            pool['subnet'] = neutron.subnet_get(request, pool['subnet_id'])
+        except Exception:
+            messages.warning(request, _("Unable to get subnet for pool "
+                                        "%(pool)s.") % {"pool": pool_id})
+        pool['vip'] = _get_vip(request, pool, vip_dict=None,
+                               expand_name_only=False)
+        try:
+            pool['members'] = _member_list(request, expand_pool=False,
+                                           pool_id=pool_id)
+        except Exception:
+            messages.warning(request, _("Unable to get members for pool "
+                                        "%(pool)s.") % {"pool": pool_id})
+        monitors = []
+        for monitor_id in pool['health_monitors']:
+            try:
+                monitors.append(_pool_health_monitor_get(request, monitor_id,
+                                                         False))
+            except Exception:
+                messages.warning(request,
+                                 _("Unable to get health monitor "
+                                   "%(monitor_id)s for pool %(pool)s.")
+                                 % {"pool": pool_id,
+                                    "monitor_id": monitor_id})
+        pool['health_monitors'] = monitors
     return Pool(pool)
 
 
@@ -230,14 +277,23 @@ def pool_health_monitor_list(request, **kwargs):
 
 
 def pool_health_monitor_get(request, monitor_id):
+    return _pool_health_monitor_get(request, monitor_id, expand_resource=True)
+
+
+def _pool_health_monitor_get(request, monitor_id, expand_resource=False):
     monitor = neutronclient(request
                             ).show_health_monitor(monitor_id
                                                   ).get('health_monitor')
+    if expand_resource:
+        pool_ids = [p['pool_id'] for p in monitor['pools']]
+        monitor['pools'] = _pool_list(request, id=pool_ids)
     return PoolMonitor(monitor)
 
 
 def pool_health_monitor_update(request, monitor_id, **kwargs):
-    monitor = neutronclient(request).update_health_monitor(monitor_id, kwargs)
+    monitor = neutronclient(request
+                            ).update_health_monitor(monitor_id, kwargs
+                                                    ).get('health_monitor')
     return PoolMonitor(monitor)
 
 
@@ -276,7 +332,7 @@ def _member_list(request, expand_pool, **kwargs):
         pools = _pool_list(request)
         pool_dict = SortedDict((p.id, p) for p in pools)
         for m in members:
-            m['pool_name'] = pool_dict.get(m['pool_id']).name
+            m['pool_name'] = pool_dict.get(m['pool_id']).name_or_id
     return [Member(m) for m in members]
 
 
@@ -287,12 +343,13 @@ def member_get(request, member_id):
 def _member_get(request, member_id, expand_pool):
     member = neutronclient(request).show_member(member_id).get('member')
     if expand_pool:
-        member['pool_name'] = _pool_get(request, member['pool_id']).name
+        member['pool'] = _pool_get(request, member['pool_id'])
     return Member(member)
 
 
 def member_update(request, member_id, **kwargs):
-    member = neutronclient(request).update_member(member_id, kwargs)
+    member = neutronclient(request).update_member(member_id, kwargs
+                                                  ).get('member')
     return Member(member)
 
 

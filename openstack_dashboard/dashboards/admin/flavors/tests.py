@@ -10,6 +10,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import json
+
 from django.core.urlresolvers import reverse
 from django import http
 from mox import IsA  # noqa
@@ -17,22 +19,23 @@ from mox import IsA  # noqa
 from openstack_dashboard import api
 from openstack_dashboard.test import helpers as test
 
-from novaclient.v1_1 import flavors
+from novaclient.v2 import flavors
 
+from openstack_dashboard.dashboards.admin.flavors import constants
 from openstack_dashboard.dashboards.admin.flavors import workflows
-
-INDEX_URL = reverse('horizon:admin:flavors:index')
 
 
 class FlavorsViewTests(test.BaseAdminViewTests):
-    @test.create_stubs({api.nova: ('flavor_list',), })
+    @test.create_stubs({api.nova: ('flavor_list',),
+                        flavors.Flavor: ('get_keys',), })
     def test_index(self):
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
+        flavors.Flavor.get_keys().MultipleTimes().AndReturn({})
         self.mox.ReplayAll()
 
-        res = self.client.get(INDEX_URL)
-        self.assertTemplateUsed(res, 'admin/flavors/index.html')
+        res = self.client.get(reverse(constants.FLAVORS_INDEX_URL))
+        self.assertTemplateUsed(res, constants.FLAVORS_TEMPLATE_NAME)
         self.assertItemsEqual(res.context['table'].data, self.flavors.list())
 
 
@@ -80,15 +83,16 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
                                                                    False])
         self.mox.ReplayAll()
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.get(url)
-        self.assertTemplateUsed(res, 'admin/flavors/create.html')
+        self.assertTemplateUsed(res, constants.FLAVORS_CREATE_VIEW_TEMPLATE)
         workflow = res.context['workflow']
         expected_name = workflows.CreateFlavor.name
         self.assertEqual(res.context['workflow'].name, expected_name)
-        self.assertQuerysetEqual(workflow.steps,
-                            ['<CreateFlavorInfo: createflavorinfoaction>',
-                             '<UpdateFlavorAccess: update_flavor_access>'])
+        self.assertQuerysetEqual(
+            workflow.steps,
+            ['<CreateFlavorInfo: createflavorinfoaction>',
+             '<UpdateFlavorAccess: update_flavor_access>'])
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_list',
@@ -106,17 +110,17 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         # handle
         params = self._flavor_create_params(flavor, id='auto')
         api.nova.flavor_create(IsA(http.HttpRequest), **params) \
-                .AndReturn(flavor)
+            .AndReturn(flavor)
 
         self.mox.ReplayAll()
 
         workflow_data = self._get_workflow_data(flavor)
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertNoFormErrors(res)
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_list',
@@ -136,7 +140,7 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         params = self._flavor_create_params(flavor, id='auto')
         params['is_public'] = False
         api.nova.flavor_create(IsA(http.HttpRequest), **params) \
-                .AndReturn(flavor)
+            .AndReturn(flavor)
         for project in projects:
             api.nova.add_tenant_to_flavor(IsA(http.HttpRequest),
                                           flavor.id, project.id)
@@ -144,11 +148,11 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         workflow_data = self._get_workflow_data(flavor, access=projects)
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertNoFormErrors(res)
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_list',)})
@@ -167,7 +171,7 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         workflow_data = self._get_workflow_data(flavor)
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertFormErrors(res)
@@ -193,7 +197,7 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         # Flavor id already exists.
         workflow_data['flavor_id'] = flavor.id
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertFormErrors(res)
@@ -216,7 +220,7 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         params = self._flavor_create_params(flavor, id='auto')
         params['is_public'] = False
         api.nova.flavor_create(IsA(http.HttpRequest), **params) \
-                .AndReturn(flavor)
+            .AndReturn(flavor)
         for project in projects:
             expect = api.nova.add_tenant_to_flavor(IsA(http.HttpRequest),
                                                    flavor.id, project.id)
@@ -226,12 +230,12 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         workflow_data = self._get_workflow_data(flavor, access=projects)
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertNoFormErrors(res)
         self.assertMessageCount(error=1, warning=0)
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_list',)})
@@ -249,7 +253,7 @@ class CreateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         workflow_data = self._get_workflow_data(flavor)
         workflow_data["name"] = ""
 
-        url = reverse('horizon:admin:flavors:create')
+        url = reverse(constants.FLAVORS_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
         self.assertFormErrors(res)
@@ -271,23 +275,24 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         api.keystone.tenant_list(IsA(http.HttpRequest)).AndReturn([projects,
                                                                    False])
         api.nova.flavor_access_list(IsA(http.HttpRequest), flavor.id) \
-                .AndReturn(flavor_access)
+            .AndReturn(flavor_access)
 
         # Put all mocks created by mox into replay mode
         self.mox.ReplayAll()
 
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         res = self.client.get(url)
 
-        self.assertTemplateUsed(res, 'admin/flavors/update.html')
+        self.assertTemplateUsed(res, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         workflow = res.context['workflow']
         expected_name = workflows.UpdateFlavor.name
         self.assertEqual(res.context['workflow'].name, expected_name)
 
-        self.assertQuerysetEqual(workflow.steps,
-                            ['<UpdateFlavorInfo: update_info>',
-                             '<UpdateFlavorAccess: update_flavor_access>'])
+        self.assertQuerysetEqual(
+            workflow.steps,
+            ['<UpdateFlavorInfo: update_info>',
+             '<UpdateFlavorAccess: update_flavor_access>'])
 
         step = workflow.get_step("update_info")
         eph = getattr(flavor, 'OS-FLV-EXT-DATA:ephemeral')
@@ -308,14 +313,14 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         flavor = self.flavors.first()
 
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
 
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         res = self.client.get(url)
 
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_get',
@@ -342,16 +347,16 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         # GET/init, set up expected behavior
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
 
         # POST/init
         api.nova.flavor_get_extras(IsA(http.HttpRequest),
                                    flavor.id, raw=True) \
-                                   .AndReturn(extra_specs)
+            .AndReturn(extra_specs)
         api.nova.flavor_delete(IsA(http.HttpRequest), flavor.id)
         api.nova.flavor_create(IsA(http.HttpRequest),
                                new_flavor.name,
@@ -366,10 +371,10 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         self.mox.ReplayAll()
 
         # run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # run post test
         workflow_data = {'flavor_id': flavor.id,
@@ -383,7 +388,8 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         resp = self.client.post(url, workflow_data)
         self.assertNoFormErrors(resp)
         self.assertMessageCount(success=1)
-        self.assertRedirectsNoFollow(resp, INDEX_URL)
+        self.assertRedirectsNoFollow(resp,
+                                     reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_get',
@@ -401,26 +407,26 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         new_flavor = flavors.Flavor(flavors.FlavorManager(None),
                                     {'id':
                                      "cccccccc-cccc-cccc-cccc-cccccccccccc",
-                                    'name': flavor.name,
-                                    'vcpus': flavor.vcpus + 1,
-                                    'disk': flavor.disk,
-                                    'ram': flavor.ram,
-                                    'swap': flavor.swap,
-                                    'OS-FLV-EXT-DATA:ephemeral': eph,
-                                    'extra_specs': extra_specs})
+                                     'name': flavor.name,
+                                     'vcpus': flavor.vcpus + 1,
+                                     'disk': flavor.disk,
+                                     'ram': flavor.ram,
+                                     'swap': flavor.swap,
+                                     'OS-FLV-EXT-DATA:ephemeral': eph,
+                                     'extra_specs': extra_specs})
 
         # GET/init, set up expected behavior
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
 
         # POST/init
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
         api.nova.flavor_get_extras(IsA(http.HttpRequest),
                                    flavor.id, raw=True) \
-                                   .AndReturn(extra_specs)
+            .AndReturn(extra_specs)
         api.nova.flavor_delete(IsA(http.HttpRequest), flavor.id)
         api.nova.flavor_create(IsA(http.HttpRequest),
                                new_flavor.name,
@@ -435,13 +441,13 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         self.mox.ReplayAll()
 
-        #run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        # run get test
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
-        #run post test
+        # run post test
         workflow_data = {'flavor_id': flavor.id,
                          'name': new_flavor.name,
                          'vcpus': new_flavor.vcpus,
@@ -453,7 +459,8 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         resp = self.client.post(url, workflow_data)
         self.assertNoFormErrors(resp)
         self.assertMessageCount(success=1)
-        self.assertRedirectsNoFollow(resp, INDEX_URL)
+        self.assertRedirectsNoFollow(resp,
+                                     reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_get',
@@ -480,9 +487,9 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         # GET/init, set up expected behavior
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
 
         # POST
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
@@ -491,7 +498,7 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         # POST/init
         api.nova.flavor_get_extras(IsA(http.HttpRequest),
                                    flavor.id, raw=True) \
-                                   .AndReturn(extra_specs)
+            .AndReturn(extra_specs)
         api.nova.flavor_delete(IsA(http.HttpRequest), flavor.id)
         api.nova.flavor_create(IsA(http.HttpRequest),
                                new_flavor.name,
@@ -501,16 +508,16 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
                                swap=new_flavor.swap,
                                ephemeral=eph,
                                is_public=True)\
-                               .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         # Put mocks in replay mode
         self.mox.ReplayAll()
 
         # run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # run post test
         workflow_data = {'flavor_id': flavor.id,
@@ -524,7 +531,8 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         resp = self.client.post(url, workflow_data)
         self.assertNoFormErrors(resp)
         self.assertMessageCount(error=1)
-        self.assertRedirectsNoFollow(resp, INDEX_URL)
+        self.assertRedirectsNoFollow(resp,
+                                     reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_get',
@@ -556,16 +564,16 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         # GET/init, set up expected behavior
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
 
         # POST/init
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
         api.nova.flavor_get_extras(IsA(http.HttpRequest),
                                    flavor.id, raw=True) \
-                                   .AndReturn(extra_specs)
+            .AndReturn(extra_specs)
 
         api.nova.flavor_delete(IsA(http.HttpRequest), flavor.id)
         api.nova.flavor_create(IsA(http.HttpRequest),
@@ -576,7 +584,7 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
                                swap=new_flavor.swap,
                                ephemeral=eph,
                                is_public=new_flavor.is_public) \
-                               .AndReturn(new_flavor)
+            .AndReturn(new_flavor)
 
         new_flavor_projects = flavor_projects
         for project in new_flavor_projects:
@@ -589,10 +597,10 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         self.mox.ReplayAll()
 
         # run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # run post test
         data = self._get_workflow_data(new_flavor, access=flavor_projects)
@@ -600,7 +608,8 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         resp = self.client.post(url, data)
         self.assertNoFormErrors(resp)
         self.assertMessageCount(error=1, warning=0)
-        self.assertRedirectsNoFollow(resp, INDEX_URL)
+        self.assertRedirectsNoFollow(resp,
+                                     reverse(constants.FLAVORS_INDEX_URL))
 
     @test.create_stubs({api.keystone: ('tenant_list',),
                         api.nova: ('flavor_get',
@@ -613,19 +622,19 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
 
         # init
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
 
         self.mox.ReplayAll()
 
         # run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # run post test
         workflow_data = {'flavor_id': flavor.id,
@@ -651,30 +660,30 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         extra_specs = getattr(flavor_a, 'extra_specs')
         new_flavor = flavors.Flavor(flavors.FlavorManager(None),
                                     {'id': flavor_a.id,
-                                    'name': flavor_b.name,
-                                    'vcpus': flavor_a.vcpus,
-                                    'disk': flavor_a.disk,
-                                    'ram': flavor_a.ram,
-                                    'swap': flavor_a.swap,
-                                    'OS-FLV-EXT-DATA:ephemeral': eph,
-                                    'extra_specs': extra_specs})
+                                     'name': flavor_b.name,
+                                     'vcpus': flavor_a.vcpus,
+                                     'disk': flavor_a.disk,
+                                     'ram': flavor_a.ram,
+                                     'swap': flavor_a.swap,
+                                     'OS-FLV-EXT-DATA:ephemeral': eph,
+                                     'extra_specs': extra_specs})
 
         # GET
         api.nova.flavor_get(IsA(http.HttpRequest), flavor_a.id) \
-                .MultipleTimes().AndReturn(flavor_a)
+            .MultipleTimes().AndReturn(flavor_a)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
 
         # POST
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
         self.mox.ReplayAll()
 
         # get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor_a.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor_a.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # post test
         data = {'flavor_id': new_flavor.id,
@@ -699,19 +708,19 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         eph = getattr(flavor, 'OS-FLV-EXT-DATA:ephemeral')
 
         api.nova.flavor_get(IsA(http.HttpRequest), flavor.id) \
-                .MultipleTimes().AndReturn(flavor)
+            .MultipleTimes().AndReturn(flavor)
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                .MultipleTimes().AndReturn([projects, False])
+            .MultipleTimes().AndReturn([projects, False])
         api.nova.flavor_list(IsA(http.HttpRequest), None) \
-                .AndReturn(self.flavors.list())
+            .AndReturn(self.flavors.list())
 
         self.mox.ReplayAll()
 
         # run get test
-        url = reverse('horizon:admin:flavors:update', args=[flavor.id])
+        url = reverse(constants.FLAVORS_UPDATE_URL, args=[flavor.id])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "admin/flavors/update.html")
+        self.assertTemplateUsed(resp, constants.FLAVORS_UPDATE_VIEW_TEMPLATE)
 
         # run post test
         workflow_data = {'flavor_id': flavor.id,
@@ -755,3 +764,117 @@ class UpdateFlavorWorkflowTests(BaseFlavorWorkflowTests):
         data = {'eph_gb': -1}
         self.generic_update_flavor_invalid_data_form_fails(override_data=data,
                                                            error_msg=error)
+
+
+class FlavorUpdateMetadataViewTest(test.BaseAdminViewTests):
+    @test.create_stubs({api.nova: ('flavor_get_extras',),
+                        api.glance: ('metadefs_namespace_list',
+                                     'metadefs_namespace_get')})
+    def test_flavor_metadata_get(self):
+        # <Flavor: m1.metadata>
+        flavor = self.flavors.list()[3]
+
+        namespaces = self.metadata_defs.list()
+
+        api.nova.flavor_get_extras(
+            IsA(http.HttpRequest),
+            flavor.id
+        ).AndReturn([flavor.extra_specs])
+        api.glance.metadefs_namespace_list(
+            IsA(http.HttpRequest),
+            filters={
+                'resource_types': ['OS::Nova::Flavor']
+            }
+        ).AndReturn((namespaces, False, False))
+
+        for namespace in namespaces:
+            api.glance.metadefs_namespace_get(
+                IsA(http.HttpRequest),
+                namespace.namespace,
+                'OS::Nova::Flavor'
+            ).AndReturn(namespace)
+
+        self.mox.ReplayAll()
+        res = self.client.get(
+            reverse(
+                constants.FLAVORS_UPDATE_METADATA_URL,
+                kwargs={'id': flavor.id}
+            )
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTemplateUsed(
+            res,
+            constants.FLAVORS_UPDATE_METADATA_TEMPLATE
+        )
+        self.assertTemplateUsed(
+            res,
+            constants.FLAVORS_UPDATE_METADATA_SUBTEMPLATE
+        )
+        self.assertContains(res, 'namespace_1')
+        self.assertContains(res, 'namespace_2')
+        self.assertContains(res, 'namespace_3')
+        self.assertContains(res, 'namespace_4')
+
+    @test.create_stubs({api.nova: ('flavor_get_extras',
+                                   'flavor_extra_set',
+                                   'flavor_extra_delete')})
+    def test_flavor_metadata_update(self):
+        # <Flavor: m1.metadata>
+        flavor = self.flavors.list()[3]
+
+        api.nova.flavor_get_extras(
+            IsA(http.HttpRequest),
+            flavor.id
+        ).AndReturn([flavor.extra_specs])
+        api.nova.flavor_extra_set(
+            IsA(http.HttpRequest),
+            flavor.id,
+            {'key_mock': 'value_mock'}
+        ).AndReturn(None)
+        api.nova.flavor_extra_delete(
+            IsA(http.HttpRequest),
+            flavor.id,
+            []
+        ).AndReturn(None)
+
+        self.mox.ReplayAll()
+
+        metadata = [{'value': 'value_mock', 'key': 'key_mock'}]
+        formData = {'metadata': json.dumps(metadata)}
+
+        res = self.client.post(
+            reverse(
+                constants.FLAVORS_UPDATE_METADATA_URL,
+                kwargs={'id': flavor.id}
+            ),
+            formData
+        )
+
+        self.assertEqual(res.status_code, 302)
+        self.assertNoFormErrors(res)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
+        self.assertMessageCount(success=1)
+
+    @test.create_stubs({api.nova: ('flavor_get_extras',)})
+    def test_flavor_metadata_get_get_extras_fails(self):
+        # <Flavor: m1.metadata>
+        flavor = self.flavors.list()[3]
+
+        api.nova.flavor_get_extras(
+            IsA(http.HttpRequest),
+            flavor.id
+        ).AndRaise(self.exceptions.nova)
+
+        self.mox.ReplayAll()
+
+        res = self.client.get(
+            reverse(
+                constants.FLAVORS_UPDATE_METADATA_URL,
+                kwargs={'id': flavor.id}
+            )
+        )
+
+        self.assertEqual(res.status_code, 302)
+        self.assertRedirectsNoFollow(res, reverse(constants.FLAVORS_INDEX_URL))
+        self.assertMessageCount(error=1)

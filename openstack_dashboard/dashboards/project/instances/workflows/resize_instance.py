@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 CentRin Data, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -23,9 +21,7 @@ from django.views.decorators.debug import sensitive_variables  # noqa
 from horizon import exceptions
 from horizon import forms
 from horizon import workflows
-
 from openstack_dashboard import api
-
 from openstack_dashboard.dashboards.project.instances \
     import utils as instance_utils
 from openstack_dashboard.dashboards.project.instances.workflows \
@@ -34,32 +30,26 @@ from openstack_dashboard.dashboards.project.instances.workflows \
 
 class SetFlavorChoiceAction(workflows.Action):
     old_flavor_id = forms.CharField(required=False, widget=forms.HiddenInput())
-    old_flavor_name = forms.CharField(label=_("Old Flavor"),
-                                 required=False,
-                                 widget=forms.TextInput(
-                                     attrs={'readonly': 'readonly'}
-                                 ))
+    old_flavor_name = forms.CharField(
+        label=_("Old Flavor"),
+        widget=forms.TextInput(attrs={'readonly': 'readonly'}),
+        required=False,
+    )
     flavor = forms.ChoiceField(label=_("New Flavor"),
-                               required=True,
                                help_text=_("Choose the flavor to launch."))
 
-    class Meta:
+    class Meta(object):
         name = _("Flavor Choice")
         slug = 'flavor_choice'
         help_text_template = ("project/instances/"
                               "_flavors_and_quotas.html")
 
-    def clean(self):
-        cleaned_data = super(SetFlavorChoiceAction, self).clean()
-        flavor = cleaned_data.get('flavor', None)
-
-        if flavor is None or flavor == cleaned_data['old_flavor_id']:
-            raise forms.ValidationError(_('Please  choose a new flavor that '
-                                          'can not be same as the old one.'))
-        return cleaned_data
-
     def populate_flavor_choices(self, request, context):
+        old_flavor_id = context.get('old_flavor_id')
         flavors = context.get('flavors').values()
+
+        # Remove current flavor from the list of flavor choices
+        flavors = [flavor for flavor in flavors if flavor.id != old_flavor_id]
         if len(flavors) > 1:
             flavors = instance_utils.sort_flavor_list(request, flavors)
         if flavors:
@@ -68,14 +58,15 @@ class SetFlavorChoiceAction(workflows.Action):
             flavors.insert(0, ("", _("No flavors available")))
         return flavors
 
-    def get_help_text(self):
-        extra = {}
+    def get_help_text(self, extra_context=None):
+        extra = {} if extra_context is None else dict(extra_context)
         try:
             extra['usages'] = api.nova.tenant_absolute_limits(self.request)
             extra['usages_json'] = json.dumps(extra['usages'])
             flavors = json.dumps([f._info for f in
                                   instance_utils.flavor_list(self.request)])
             extra['flavors'] = flavors
+            extra['resize_instance'] = True
         except Exception:
             exceptions.handle(self.request,
                               _("Unable to retrieve quota information."))

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 NTT Innovation Institute Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,16 +13,16 @@
 #    under the License.
 
 from django.utils.translation import ugettext_lazy as _
-from openstack_dashboard.dashboards.project.routers import\
-    tables as r_tables
+
+from openstack_dashboard.dashboards.project.routers import tables
 
 
-class DeleteRouter(r_tables.DeleteRouter):
+class DeleteRouter(tables.DeleteRouter):
     redirect_url = "horizon:project:network_topology:router"
 
 
-class RoutersTable(r_tables.RoutersTable):
-    class Meta:
+class RoutersTable(tables.RoutersTable):
+    class Meta(object):
         name = "Routers"
         verbose_name = _("Routers")
         status_columns = ["status"]

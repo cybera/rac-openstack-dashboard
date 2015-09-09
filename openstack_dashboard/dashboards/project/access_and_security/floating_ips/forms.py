@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -48,7 +46,7 @@ class FloatingIpAllocate(forms.SelfHandlingForm):
                 return False
 
             fip = api.network.tenant_floating_ip_allocate(request,
-                                                       pool=data['pool'])
+                                                          pool=data['pool'])
             messages.success(request,
                              _('Allocated Floating IP %(ip)s.')
                              % {"ip": fip.ip})

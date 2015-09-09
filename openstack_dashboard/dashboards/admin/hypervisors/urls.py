@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 B1 Systems GmbH
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,9 +12,12 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import include
+from django.conf.urls import patterns
+from django.conf.urls import url
 
+from openstack_dashboard.dashboards.admin.hypervisors.compute \
+    import urls as compute_urls
 from openstack_dashboard.dashboards.admin.hypervisors import views
 
 
@@ -25,5 +26,6 @@ urlpatterns = patterns(
     url(r'^(?P<hypervisor>[^/]+)/$',
         views.AdminDetailView.as_view(),
         name='detail'),
-    url(r'^$', views.AdminIndexView.as_view(), name='index')
+    url(r'^$', views.AdminIndexView.as_view(), name='index'),
+    url(r'', include(compute_urls, namespace='compute')),
 )

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013, Mirantis Inc
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,8 +11,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: Tatiana Mazur
 
 from mox import IsA  # noqa
 
@@ -586,7 +582,7 @@ class VPNTests(test.TestCase):
         self.mox.ReplayAll()
 
         form_data = data.copy()
-        form_data.update({'vpnservice_id': vpnservice.id})
+        form_data['vpnservice_id'] = vpnservice.id
 
         res = self.client.post(reverse(
             self.UPDATEVPNSERVICE_PATH, args=(vpnservice.id,)), form_data)
@@ -632,11 +628,10 @@ class VPNTests(test.TestCase):
 
         form_data = data.copy()
 
-        form_data.update({'lifetime_units': form_data['lifetime']['units']})
-        form_data.update({'lifetime_value': form_data['lifetime']['value']})
+        form_data.update({'lifetime_units': form_data['lifetime']['units'],
+                          'lifetime_value': form_data['lifetime']['value'],
+                          'ikepolicy_id': ikepolicy.id})
         form_data.pop('lifetime')
-
-        form_data.update({'ikepolicy_id': ikepolicy.id})
 
         res = self.client.post(reverse(
             self.UPDATEIKEPOLICY_PATH, args=(ikepolicy.id,)), form_data)
@@ -682,11 +677,10 @@ class VPNTests(test.TestCase):
 
         form_data = data.copy()
 
-        form_data.update({'lifetime_units': form_data['lifetime']['units']})
-        form_data.update({'lifetime_value': form_data['lifetime']['value']})
+        form_data.update({'lifetime_units': form_data['lifetime']['units'],
+                          'lifetime_value': form_data['lifetime']['value'],
+                          'ipsecpolicy_id': ipsecpolicy.id})
         form_data.pop('lifetime')
-
-        form_data.update({'ipsecpolicy_id': ipsecpolicy.id})
 
         res = self.client.post(reverse(
             self.UPDATEIPSECPOLICY_PATH, args=(ipsecpolicy.id,)), form_data)
@@ -739,14 +733,14 @@ class VPNTests(test.TestCase):
 
         form_data = data.copy()
 
-        form_data.update({'dpd_action': form_data['dpd']['action']})
-        form_data.update({'dpd_interval': form_data['dpd']['interval']})
-        form_data.update({'dpd_timeout': form_data['dpd']['timeout']})
+        form_data.update({
+            'dpd_action': form_data['dpd']['action'],
+            'dpd_interval': form_data['dpd']['interval'],
+            'dpd_timeout': form_data['dpd']['timeout'],
+            'peer_cidrs': ", ".join(ipsecsiteconnection['peer_cidrs']),
+            'ipsecsiteconnection_id': ipsecsiteconnection.id,
+        })
         form_data.pop('dpd')
-
-        form_data['peer_cidrs'] = ", ".join(ipsecsiteconnection['peer_cidrs'])
-
-        form_data.update({'ipsecsiteconnection_id': ipsecsiteconnection.id})
 
         res = self.client.post(
             reverse(self.UPDATEVPNCONNECTION_PATH,

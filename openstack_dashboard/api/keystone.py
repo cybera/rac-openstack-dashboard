@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -19,6 +17,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import collections
 import logging
 
 from django.conf import settings
@@ -35,6 +34,7 @@ from horizon import messages
 from horizon.utils import functions as utils
 
 from openstack_dashboard.api import base
+from openstack_dashboard import policy
 
 
 LOG = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ def keystoneclient(request, admin=False):
     """
     user = request.user
     if admin:
-        if not user.is_superuser:
+        if not policy.check((("identity", "admin_required"),), request):
             raise exceptions.NotAuthorized
         endpoint_type = 'adminURL'
     else:
@@ -158,9 +158,9 @@ def keystoneclient(request, admin=False):
     # Admin vs. non-admin clients are cached separately for token matching.
     cache_attr = "_keystoneclient_admin" if admin \
         else backend.KEYSTONE_CLIENT_ATTR
-    if hasattr(request, cache_attr) and (not user.token.id
-            or getattr(request, cache_attr).auth_token == user.token.id):
-        LOG.debug("Using cached client for token: %s" % user.token.id)
+    if (hasattr(request, cache_attr) and
+        (not user.token.id or
+         getattr(request, cache_attr).auth_token == user.token.id)):
         conn = getattr(request, cache_attr)
     else:
         endpoint = _get_endpoint_url(request, endpoint_type)
@@ -220,6 +220,7 @@ def tenant_create(request, name, description=None, enabled=None,
 
 def get_default_domain(request):
     """Gets the default domain object to use when creating Identity object.
+
     Returns the domain context if is set, otherwise return the domain
     of the logon user.
     """
@@ -253,8 +254,9 @@ def tenant_delete(request, project):
     return manager.delete(project)
 
 
-def tenant_list(request, paginate=False, marker=None, domain=None, user=None):
-    manager = VERSIONS.get_project_manager(request, admin=True)
+def tenant_list(request, paginate=False, marker=None, domain=None, user=None,
+                admin=True, filters=None):
+    manager = VERSIONS.get_project_manager(request, admin=admin)
     page_size = utils.get_page_size(request)
 
     limit = None
@@ -262,13 +264,25 @@ def tenant_list(request, paginate=False, marker=None, domain=None, user=None):
         limit = page_size + 1
 
     has_more_data = False
-    if VERSIONS.active < 3:
+
+    # if requesting the projects for the current user,
+    # return the list from the cache
+    if user == request.user.id:
+        tenants = request.user.authorized_tenants
+
+    elif VERSIONS.active < 3:
         tenants = manager.list(limit, marker)
         if paginate and len(tenants) > page_size:
             tenants.pop(-1)
             has_more_data = True
     else:
-        tenants = manager.list(domain=domain, user=user)
+        kwargs = {
+            "domain": domain,
+            "user": user
+        }
+        if filters is not None:
+            kwargs.update(filters)
+        tenants = manager.list(**kwargs)
     return (tenants, has_more_data)
 
 
@@ -282,7 +296,7 @@ def tenant_update(request, project, name=None, description=None,
                               enabled=enabled, domain=domain, **kwargs)
 
 
-def user_list(request, project=None, domain=None, group=None):
+def user_list(request, project=None, domain=None, group=None, filters=None):
     if VERSIONS.active < 3:
         kwargs = {"tenant_id": project}
     else:
@@ -291,6 +305,8 @@ def user_list(request, project=None, domain=None, group=None):
             "domain": domain,
             "group": group
         }
+        if filters is not None:
+            kwargs.update(filters)
     users = keystoneclient(request, admin=True).users.list(**kwargs)
     return [VERSIONS.upgrade_v2_user(user) for user in users]
 
@@ -298,12 +314,16 @@ def user_list(request, project=None, domain=None, group=None):
 def user_create(request, name=None, email=None, password=None, project=None,
                 enabled=None, domain=None):
     manager = keystoneclient(request, admin=True).users
-    if VERSIONS.active < 3:
-        user = manager.create(name, password, email, project, enabled)
-        return VERSIONS.upgrade_v2_user(user)
-    else:
-        return manager.create(name, password=password, email=email,
-                              project=project, enabled=enabled, domain=domain)
+    try:
+        if VERSIONS.active < 3:
+            user = manager.create(name, password, email, project, enabled)
+            return VERSIONS.upgrade_v2_user(user)
+        else:
+            return manager.create(name, password=password, email=email,
+                                  project=project, enabled=enabled,
+                                  domain=domain)
+    except keystone_exceptions.Conflict:
+        raise exceptions.Conflict()
 
 
 def user_delete(request, user_id):
@@ -320,17 +340,18 @@ def user_update(request, user, **data):
     error = None
 
     if not keystone_can_edit_user():
-        raise keystone_exceptions.ClientException(405, _("Identity service "
-                                    "does not allow editing user data."))
+        raise keystone_exceptions.ClientException(
+            405, _("Identity service does not allow editing user data."))
 
-    # The v2 API updates user model, password and default project separately
+    # The v2 API updates user model and default project separately
     if VERSIONS.active < 3:
-        password = data.pop('password')
         project = data.pop('project')
 
         # Update user details
         try:
             user = manager.update(user, **data)
+        except keystone_exceptions.Conflict:
+            raise exceptions.Conflict()
         except Exception:
             error = exceptions.handle(request, ignore=True)
 
@@ -350,32 +371,15 @@ def user_update(request, user, **data):
                                'that project.')
                              % data.get('name', None))
 
-        # If present, update password
-        # FIXME(gabriel): password change should be its own form + view
-        if password:
-            try:
-                user_update_password(request, user, password)
-                if user.id == request.user.id:
-                    return utils.logout_with_message(
-                        request,
-                        _("Password changed. Please log in again to continue.")
-                    )
-            except Exception:
-                error = exceptions.handle(request, ignore=True)
-
         if error is not None:
             raise error
 
     # v3 API is so much simpler...
     else:
-        if not data['password']:
-            data.pop('password')
-        user = manager.update(user, **data)
-        if data.get('password') and user.id == request.user.id:
-            return utils.logout_with_message(
-                request,
-                _("Password changed. Please log in again to continue.")
-            )
+        try:
+            user = manager.update(user, **data)
+        except keystone_exceptions.Conflict:
+            raise exceptions.Conflict()
 
 
 def user_update_enabled(request, user, enabled):
@@ -387,11 +391,37 @@ def user_update_enabled(request, user, enabled):
 
 
 def user_update_password(request, user, password, admin=True):
+
+    if not keystone_can_edit_user():
+        raise keystone_exceptions.ClientException(
+            405, _("Identity service does not allow editing user password."))
+
     manager = keystoneclient(request, admin=admin).users
     if VERSIONS.active < 3:
         return manager.update_password(user, password)
     else:
         return manager.update(user, password=password)
+
+
+def user_verify_admin_password(request, admin_password):
+    # attempt to create a new client instance with admin password to
+    # verify if it's correct.
+    client = keystone_client_v2 if VERSIONS.active < 3 else keystone_client_v3
+    try:
+        endpoint = _get_endpoint_url(request, 'internalURL')
+        insecure = getattr(settings, 'OPENSTACK_SSL_NO_VERIFY', False)
+        cacert = getattr(settings, 'OPENSTACK_SSL_CACERT', None)
+        client.Client(
+            username=request.user.username,
+            password=admin_password,
+            insecure=insecure,
+            cacert=cacert,
+            auth_url=endpoint
+        )
+        return True
+    except Exception:
+        exceptions.handle(request, ignore=True)
+        return False
 
 
 def user_update_own_password(request, origpassword, password):
@@ -430,15 +460,7 @@ def group_delete(request, group_id):
 
 def group_list(request, domain=None, project=None, user=None):
     manager = keystoneclient(request, admin=True).groups
-    groups = manager.list(user=user)
-    # TODO(dklyle): once keystoneclient supports filtering by
-    # domain change this to use that cleaner implementation
-    if domain:
-        domain_groups = []
-        for group in groups:
-            if group.domain_id == domain:
-                domain_groups.append(group)
-        groups = domain_groups
+    groups = manager.list(user=user, domain=domain)
 
     if project:
         project_groups = []
@@ -468,6 +490,39 @@ def remove_group_user(request, group_id, user_id):
     return manager.remove_from_group(group=group_id, user=user_id)
 
 
+def get_project_groups_roles(request, project):
+    """Gets the groups roles in a given project.
+
+    :param request: the request entity containing the login user information
+    :param project: the project to filter the groups roles. It accepts both
+                    project object resource or project ID
+
+    :returns group_roles: a dictionary mapping the groups and their roles in
+                          given project
+
+    """
+    groups_roles = collections.defaultdict(list)
+    project_role_assignments = role_assignments_list(request,
+                                                     project=project)
+    for role_assignment in project_role_assignments:
+        if not hasattr(role_assignment, 'group'):
+            continue
+        group_id = role_assignment.group['id']
+        role_id = role_assignment.role['id']
+        groups_roles[group_id].append(role_id)
+    return groups_roles
+
+
+def role_assignments_list(request, project=None, user=None, role=None,
+                          group=None, domain=None, effective=False):
+    if VERSIONS.active < 3:
+        raise exceptions.NotAvailable
+
+    manager = keystoneclient(request, admin=True).role_assignments
+    return manager.list(project=project, user=user, role=role, group=group,
+                        domain=domain, effective=effective)
+
+
 def role_create(request, name):
     manager = keystoneclient(request, admin=True).roles
     return manager.create(name)
@@ -493,12 +548,59 @@ def role_list(request):
     return keystoneclient(request, admin=True).roles.list()
 
 
-def roles_for_user(request, user, project):
+def roles_for_user(request, user, project=None, domain=None):
+    """Returns a list of user roles scoped to a project or domain."""
     manager = keystoneclient(request, admin=True).roles
     if VERSIONS.active < 3:
         return manager.roles_for_user(user, project)
     else:
-        return manager.list(user=user, project=project)
+        return manager.list(user=user, domain=domain, project=project)
+
+
+def get_domain_users_roles(request, domain):
+    users_roles = collections.defaultdict(list)
+    domain_role_assignments = role_assignments_list(request,
+                                                    domain=domain)
+    for role_assignment in domain_role_assignments:
+        if not hasattr(role_assignment, 'user'):
+            continue
+        user_id = role_assignment.user['id']
+        role_id = role_assignment.role['id']
+        users_roles[user_id].append(role_id)
+    return users_roles
+
+
+def add_domain_user_role(request, user, role, domain):
+    """Adds a role for a user on a domain."""
+    manager = keystoneclient(request, admin=True).roles
+    return manager.grant(role, user=user, domain=domain)
+
+
+def remove_domain_user_role(request, user, role, domain=None):
+    """Removes a given single role for a user from a domain."""
+    manager = keystoneclient(request, admin=True).roles
+    return manager.revoke(role, user=user, domain=domain)
+
+
+def get_project_users_roles(request, project):
+    users_roles = collections.defaultdict(list)
+    if VERSIONS.active < 3:
+        project_users = user_list(request, project=project)
+
+        for user in project_users:
+            roles = roles_for_user(request, user.id, project)
+            roles_ids = [role.id for role in roles]
+            users_roles[user.id].extend(roles_ids)
+    else:
+        project_role_assignments = role_assignments_list(request,
+                                                         project=project)
+        for role_assignment in project_role_assignments:
+            if not hasattr(role_assignment, 'user'):
+                continue
+            user_id = role_assignment.user['id']
+            role_id = role_assignment.role['id']
+            users_roles[user_id].append(role_id)
+    return users_roles
 
 
 def add_tenant_user_role(request, project=None, user=None, role=None,
@@ -552,9 +654,7 @@ def remove_group_role(request, role, group, domain=None, project=None):
 
 
 def remove_group_roles(request, group, domain=None, project=None):
-    """Removes all roles from a group on a domain or project,
-    removing them from it.
-    """
+    """Removes all roles from a group on a domain or project."""
     client = keystoneclient(request, admin=True)
     roles = client.roles.list(group=group, domain=domain, project=project)
     for role in roles:
@@ -563,8 +663,9 @@ def remove_group_roles(request, group, domain=None, project=None):
 
 
 def get_default_role(request):
-    """Gets the default role object from Keystone and saves it as a global
-    since this is configured in settings and should not change from request
+    """Gets the default role object from Keystone and saves it as a global.
+
+    Since this is configured in settings and should not change from request
     to request. Supports lookup by name or id.
     """
     global DEFAULT_ROLE

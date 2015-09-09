@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 OpenStack Foundation
 # All Rights Reserved.
 #
@@ -23,7 +21,6 @@ from django.views.decorators.debug import sensitive_variables  # noqa
 from horizon import exceptions
 from horizon import forms
 from horizon import messages
-from horizon.utils import fields
 from horizon.utils import validators
 
 from openstack_dashboard import api
@@ -37,18 +34,22 @@ def _image_choice_title(img):
 
 class RebuildInstanceForm(forms.SelfHandlingForm):
     instance_id = forms.CharField(widget=forms.HiddenInput())
-    image = forms.ChoiceField(label=_("Select Image"),
-            widget=fields.SelectWidget(attrs={'class': 'image-selector'},
-                                       data_attrs=('size', 'display-name'),
-                                       transform=_image_choice_title))
-    password = forms.RegexField(label=_("Rebuild Password"),
-            required=False,
-            widget=forms.PasswordInput(render_value=False),
-            regex=validators.password_validator(),
-            error_messages={'invalid': validators.password_validator_msg()})
-    confirm_password = forms.CharField(label=_("Confirm Rebuild Password"),
-            required=False,
-            widget=forms.PasswordInput(render_value=False))
+
+    image = forms.ChoiceField(
+        label=_("Select Image"),
+        widget=forms.SelectWidget(attrs={'class': 'image-selector'},
+                                  data_attrs=('size', 'display-name'),
+                                  transform=_image_choice_title))
+    password = forms.RegexField(
+        label=_("Rebuild Password"),
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        regex=validators.password_validator(),
+        error_messages={'invalid': validators.password_validator_msg()})
+    confirm_password = forms.CharField(
+        label=_("Confirm Rebuild Password"),
+        required=False,
+        widget=forms.PasswordInput(render_value=False))
     disk_config = forms.ChoiceField(label=_("Disk Partition"),
                                     required=False)
 
@@ -69,9 +70,17 @@ class RebuildInstanceForm(forms.SelfHandlingForm):
             del self.fields['password']
             del self.fields['confirm_password']
 
-        # Set our disk_config choices
-        config_choices = [("AUTO", _("Automatic")), ("MANUAL", _("Manual"))]
-        self.fields['disk_config'].choices = config_choices
+        try:
+            if not api.nova.extension_supported("DiskConfig", request):
+                del self.fields['disk_config']
+            else:
+                # Set our disk_config choices
+                config_choices = [("AUTO", _("Automatic")),
+                                  ("MANUAL", _("Manual"))]
+                self.fields['disk_config'].choices = config_choices
+        except Exception:
+            exceptions.handle(request, _('Unable to retrieve extensions '
+                                         'information.'))
 
     def clean(self):
         cleaned_data = super(RebuildInstanceForm, self).clean()
@@ -107,7 +116,7 @@ class DecryptPasswordInstanceForm(forms.SelfHandlingForm):
     _keypair_name_label = _("Key Pair Name")
     _keypair_name_help = _("The Key Pair name that "
                            "was associated with the instance")
-    _attrs = {'readonly': 'readonly'}
+    _attrs = {'readonly': 'readonly', 'rows': 4}
     keypair_name = forms.CharField(widget=forms.widgets.TextInput(_attrs),
                                    label=_keypair_name_label,
                                    help_text=_keypair_name_help,
@@ -137,12 +146,10 @@ class DecryptPasswordInstanceForm(forms.SelfHandlingForm):
                 self.fields['encrypted_password'].initial = result
                 self.fields['private_key_file'] = forms.FileField(
                     label=_('Private Key File'),
-                    widget=forms.FileInput(),
-                    required=True)
+                    widget=forms.FileInput())
                 self.fields['private_key'] = forms.CharField(
                     widget=forms.widgets.Textarea(),
-                    label=_("OR Copy/Paste your Private Key"),
-                    required=True)
+                    label=_("OR Copy/Paste your Private Key"))
                 _attrs = {'readonly': 'readonly'}
                 self.fields['decrypted_password'] = forms.CharField(
                     widget=forms.widgets.TextInput(_attrs),

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -42,7 +40,9 @@ def openstack(request):
     # Auth/Keystone context
     context.setdefault('authorized_tenants', [])
     if request.user.is_authenticated():
-        context['authorized_tenants'] = request.user.authorized_tenants
+        context['authorized_tenants'] = [
+            tenant for tenant in
+            request.user.authorized_tenants if tenant.enabled]
 
     # Region context/support
     available_regions = getattr(settings, 'AVAILABLE_REGIONS', [])
@@ -52,14 +52,5 @@ def openstack(request):
                'available': [{'endpoint': region[0], 'name':region[1]} for
                              region in available_regions]}
     context['regions'] = regions
-
-    # JT
-    admin_notice = ''
-    context['admin_notice'] = ''
-    with open('/etc/openstack-dashboard/admin-notice.txt') as f:
-        admin_notice = f.readline().strip()
-
-    if admin_notice != '':
-        context['admin_notice'] = admin_notice
 
     return context

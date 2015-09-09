@@ -23,37 +23,57 @@ from horizon.utils import filters
 class CSVSummary(tables.LinkAction):
     name = "csv_summary"
     verbose_name = _("Download CSV Summary")
-    classes = ("btn-download",)
+    icon = "download"
 
     def get_link_url(self, usage=None):
         return self.table.kwargs['usage'].csv_link()
 
 
+class DownloadJujuEnv(tables.LinkAction):
+    name = "download_jujuenv"
+    verbose_name = _("Download Juju Environment File")
+    verbose_name_plural = _("Download Juju Environment File")
+    icon = "download"
+    url = "horizon:project:access_and_security:api_access:juju"
+
+
 class BaseUsageTable(tables.DataTable):
     vcpus = tables.Column('vcpus', verbose_name=_("VCPUs"))
-    disk = tables.Column('local_gb', verbose_name=_("Disk"))
+    disk = tables.Column('local_gb', verbose_name=_("Disk"),
+                         filters=(sizeformat.diskgbformat,))
     memory = tables.Column('memory_mb',
                            verbose_name=_("RAM"),
-                           filters=(sizeformat.mbformat,),
+                           filters=(sizeformat.mb_float_format,),
                            attrs={"data-type": "size"})
-    hours = tables.Column('vcpu_hours', verbose_name=_("VCPU Hours"),
-                          filters=(lambda v: floatformat(v, 2),))
 
 
 class GlobalUsageTable(BaseUsageTable):
     project = tables.Column('project_name', verbose_name=_("Project Name"))
+    vcpu_hours = tables.Column('vcpu_hours', verbose_name=_("VCPU Hours"),
+                               help_text=_("Total VCPU usage (Number of "
+                                           "VCPU in instance * Hours Used) "
+                                           "for the project"),
+                               filters=(lambda v: floatformat(v, 2),))
     disk_hours = tables.Column('disk_gb_hours',
                                verbose_name=_("Disk GB Hours"),
+                               help_text=_("Total disk usage (GB * "
+                                           "Hours Used) for the project"),
                                filters=(lambda v: floatformat(v, 2),))
+    memory_hours = tables.Column('memory_mb_hours',
+                                 verbose_name=_("Memory MB Hours"),
+                                 help_text=_("Total memory usage (MB * "
+                                             "Hours Used) for the project"),
+                                 filters=(lambda v: floatformat(v, 2),))
 
     def get_object_id(self, datum):
         return datum.tenant_id
 
-    class Meta:
+    class Meta(object):
         name = "global_usage"
+        hidden_title = False
         verbose_name = _("Usage")
         columns = ("project", "vcpus", "disk", "memory",
-                   "hours", "disk_hours")
+                   "vcpu_hours", "disk_hours", "memory_hours")
         table_actions = (CSVSummary,)
         multi_select = False
 
@@ -71,16 +91,17 @@ class ProjectUsageTable(BaseUsageTable):
                              verbose_name=_("Instance Name"),
                              link=get_instance_link)
     uptime = tables.Column('uptime_at',
-                           verbose_name=_("Uptime"),
+                           verbose_name=_("Time since created"),
                            filters=(filters.timesince_sortable,),
                            attrs={'data-type': 'timesince'})
 
     def get_object_id(self, datum):
         return datum.get('instance_id', id(datum))
 
-    class Meta:
+    class Meta(object):
         name = "project_usage"
+        hidden_title = False
         verbose_name = _("Usage")
         columns = ("instance", "vcpus", "disk", "memory", "uptime")
-        table_actions = (CSVSummary,)
+        table_actions = (CSVSummary, DownloadJujuEnv,)
         multi_select = False

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013, Big Switch Networks
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -36,6 +34,7 @@ class AddRouterRuleView(forms.ModalFormView):
     template_name = 'project/routers/extensions/routerrules/create.html'
     success_url = 'horizon:project:routers:detail'
     failure_url = 'horizon:project:routers:detail'
+    page_title = _("Add Router Rule")
 
     def get_success_url(self):
         return reverse(self.success_url,

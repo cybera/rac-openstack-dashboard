@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -37,14 +35,15 @@ class RouterRulesTab(tabs.TableTab):
 
     def allowed(self, request):
         try:
-            getattr(self.tab_group.router, 'router_rules')
+            getattr(self.tab_group.kwargs['router'], 'router_rules')
             return True
         except Exception:
             return False
 
     def get_routerrules_data(self):
         try:
-            routerrules = getattr(self.tab_group.router, 'router_rules')
+            routerrules = getattr(self.tab_group.kwargs['router'],
+                                  'router_rules')
         except Exception:
             routerrules = []
         return [rulemanager.RuleObject(r) for r in routerrules]
@@ -53,8 +52,8 @@ class RouterRulesTab(tabs.TableTab):
         if request.POST['action'] == 'routerrules__resetrules':
             kwargs['reset_rules'] = True
             rulemanager.remove_rules(request, [], **kwargs)
-            self.tab_group.router = api.neutron.router_get(request,
-                                                           kwargs['router_id'])
+            self.tab_group.kwargs['router'] = \
+                api.neutron.router_get(request, kwargs['router_id'])
 
 
 class RulesGridTab(tabs.Tab):
@@ -64,7 +63,7 @@ class RulesGridTab(tabs.Tab):
 
     def allowed(self, request):
         try:
-            getattr(self.tab_group.router, 'router_rules')
+            getattr(self.tab_group.kwargs['router'], 'router_rules')
             return True
         except Exception:
             return False
@@ -84,15 +83,13 @@ class RulesGridTab(tabs.Tab):
         return data
 
     def get_routerrulesgrid_data(self, rules):
-        ports = self.tab_group.ports
-        networks = api.neutron.network_list_for_tenant(self.request,
-                                         self.request.user.tenant_id)
-        for n in networks:
-            n.set_id_as_name_if_empty()
+        ports = self.tab_group.kwargs['ports']
+        networks = api.neutron.network_list_for_tenant(
+            self.request, self.request.user.tenant_id)
         netnamemap = {}
         subnetmap = {}
         for n in networks:
-            netnamemap[n['id']] = n['name']
+            netnamemap[n['id']] = n.name_or_id
             for s in n.subnets:
                 subnetmap[s.id] = {'name': s.name,
                                    'cidr': s.cidr}
@@ -160,9 +157,9 @@ class RulesGridTab(tabs.Tab):
             dst = netaddr.IPNetwork(dst)
             # check if cidrs are affected by rule first
             if (int(dst.network) >= int(rd.broadcast) or
-                int(dst.broadcast) <= int(rd.network) or
-                int(src.network) >= int(rs.broadcast) or
-                   int(src.broadcast) <= int(rs.network)):
+                    int(dst.broadcast) <= int(rd.network) or
+                    int(src.network) >= int(rs.broadcast) or
+                    int(src.broadcast) <= int(rs.network)):
                 continue
 
             # skip matching rules for 'any' and 'external' networks
@@ -196,7 +193,7 @@ class RulesGridTab(tabs.Tab):
                              reverse=True)
         match = sortedrules[0]
         if (match['bitsinsrc'] > src.prefixlen or
-               match['bitsindst'] > dst.prefixlen):
+                match['bitsindst'] > dst.prefixlen):
             connectivity['reachable'] = 'partial'
             connectivity['conflicting_rule'] = match['rule']
             return connectivity
@@ -218,7 +215,8 @@ class RulesGridTab(tabs.Tab):
 
     def get_routerrules_data(self, checksupport=False):
         try:
-            routerrules = getattr(self.tab_group.router, 'router_rules')
+            routerrules = getattr(self.tab_group.kwargs['router'],
+                                  'router_rules')
             supported = True
         except Exception:
             routerrules = []

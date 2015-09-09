@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012,  Nachi Ueno,  NTT MCL,  Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 
 import horizon
@@ -26,4 +25,6 @@ class Routers(horizon.Panel):
     slug = 'routers'
     permissions = ('openstack.services.network',)
 
-dashboard.Project.register(Routers)
+network_config = getattr(settings, 'OPENSTACK_NEUTRON_NETWORK', {})
+if network_config.get('enable_router', True):
+    dashboard.Project.register(Routers)

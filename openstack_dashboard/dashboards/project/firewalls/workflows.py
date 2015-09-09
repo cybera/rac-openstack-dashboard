@@ -1,4 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
 #    Copyright 2013, Big Switch Networks, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -12,14 +11,11 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: KC Wang, Big Switch Networks
 
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
 from horizon import forms
-from horizon.utils import fields
 from horizon.utils import validators
 from horizon import workflows
 
@@ -47,13 +43,13 @@ class AddRuleAction(workflows.Action):
         label=_("Action"),
         choices=[('allow', _('ALLOW')),
                  ('deny', _('DENY'))],)
-    source_ip_address = fields.IPField(
+    source_ip_address = forms.IPField(
         label=_("Source IP Address/Subnet"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         required=False, mask=True)
-    destination_ip_address = fields.IPField(
+    destination_ip_address = forms.IPField(
         label=_("Destination IP Address/Subnet"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         required=False, mask=True)
     source_port = forms.CharField(
         max_length=80,
@@ -73,7 +69,7 @@ class AddRuleAction(workflows.Action):
     def __init__(self, request, *args, **kwargs):
         super(AddRuleAction, self).__init__(request, *args, **kwargs)
 
-    class Meta:
+    class Meta(object):
         name = _("AddRule")
         permissions = ('openstack.services.network',)
         help_text = _("Create a firewall rule.\n\n"
@@ -137,7 +133,7 @@ class SelectRulesAction(workflows.Action):
         widget=forms.CheckboxSelectMultiple(),
         help_text=_("Create a policy with selected rules."))
 
-    class Meta:
+    class Meta(object):
         name = _("Rules")
         permissions = ('openstack.services.network',)
         help_text = _("Select rules for your policy.")
@@ -145,12 +141,10 @@ class SelectRulesAction(workflows.Action):
     def populate_rule_choices(self, request, context):
         try:
             tenant_id = self.request.user.tenant_id
-            rules = api.fwaas.rule_list(request, tenant_id=tenant_id)
-            for r in rules:
-                r.set_id_as_name_if_empty()
+            rules = api.fwaas.rule_list_for_tenant(request, tenant_id)
             rules = sorted(rules,
-                           key=lambda rule: rule.name)
-            rule_list = [(rule.id, rule.name) for rule in rules
+                           key=lambda rule: rule.name_or_id)
+            rule_list = [(rule.id, rule.name_or_id) for rule in rules
                          if not rule.firewall_policy_id]
         except Exception as e:
             rule_list = []
@@ -174,10 +168,54 @@ class SelectRulesStep(workflows.Step):
             return context
 
 
+class SelectRoutersAction(workflows.Action):
+    router = forms.MultipleChoiceField(
+        label=_("Routers"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(),
+        help_text=_("Create a firewall with selected routers."))
+
+    class Meta(object):
+        name = _("Routers")
+        permissions = ('openstack.services.network',)
+        help_text = _("Select routers for your firewall.")
+
+    def populate_router_choices(self, request, context):
+        try:
+            tenant_id = self.request.user.tenant_id
+            routers_list = api.fwaas.firewall_unassociated_routers_list(
+                request, tenant_id)
+
+        except Exception as e:
+            routers_list = []
+            exceptions.handle(request,
+                              _('Unable to retrieve routers (%(error)s).') % {
+                                  'error': str(e)})
+        routers_list = [(router.id, router.name_or_id)
+                        for router in routers_list]
+        return routers_list
+
+
+class SelectRoutersStep(workflows.Step):
+    action_class = SelectRoutersAction
+    template_name = "project/firewalls/_update_routers.html"
+    contributes = ("router_ids", "all_routers_selected",
+                   "Select No Routers")
+
+    def contribute(self, data, context):
+        if data:
+            routers = self.workflow.request.POST.getlist("router")
+            if routers:
+                routers = [r for r in routers if r != '']
+                context['router_ids'] = routers
+            else:
+                context['router_ids'] = []
+            return context
+
+
 class AddPolicyAction(workflows.Action):
     name = forms.CharField(max_length=80,
-                           label=_("Name"),
-                           required=True)
+                           label=_("Name"))
     description = forms.CharField(max_length=80,
                                   label=_("Description"),
                                   required=False)
@@ -191,7 +229,7 @@ class AddPolicyAction(workflows.Action):
     def __init__(self, request, *args, **kwargs):
         super(AddPolicyAction, self).__init__(request, *args, **kwargs)
 
-    class Meta:
+    class Meta(object):
         name = _("AddPolicy")
         permissions = ('openstack.services.network',)
         help_text = _("Create a firewall policy with an ordered list "
@@ -239,14 +277,13 @@ class AddFirewallAction(workflows.Action):
     description = forms.CharField(max_length=80,
                                   label=_("Description"),
                                   required=False)
-    firewall_policy_id = forms.ChoiceField(label=_("Policy"),
-                                           required=True)
+    firewall_policy_id = forms.ChoiceField(label=_("Policy"))
     shared = forms.BooleanField(label=_("Shared"),
                                 initial=False,
                                 required=False)
-    admin_state_up = forms.BooleanField(label=_("Admin State"),
-                                        initial=True,
-                                        required=False)
+    admin_state_up = forms.ChoiceField(choices=[(True, _('UP')),
+                                                (False, _('DOWN'))],
+                                       label=_("Admin State"))
 
     def __init__(self, request, *args, **kwargs):
         super(AddFirewallAction, self).__init__(request, *args, **kwargs)
@@ -254,7 +291,7 @@ class AddFirewallAction(workflows.Action):
         firewall_policy_id_choices = [('', _("Select a Policy"))]
         try:
             tenant_id = self.request.user.tenant_id
-            policies = api.fwaas.policy_list(request, tenant_id=tenant_id)
+            policies = api.fwaas.policy_list_for_tenant(request, tenant_id)
             policies = sorted(policies, key=lambda policy: policy.name)
         except Exception as e:
             exceptions.handle(
@@ -263,14 +300,13 @@ class AddFirewallAction(workflows.Action):
                     'error': str(e)})
             policies = []
         for p in policies:
-            p.set_id_as_name_if_empty()
-            firewall_policy_id_choices.append((p.id, p.name))
+            firewall_policy_id_choices.append((p.id, p.name_or_id))
         self.fields['firewall_policy_id'].choices = firewall_policy_id_choices
         # only admin can set 'shared' attribute to True
         if not request.user.is_superuser:
             self.fields['shared'].widget.attrs['disabled'] = 'disabled'
 
-    class Meta:
+    class Meta(object):
         name = _("AddFirewall")
         permissions = ('openstack.services.network',)
         help_text = _("Create a firewall based on a policy.\n\n"
@@ -285,6 +321,7 @@ class AddFirewallStep(workflows.Step):
 
     def contribute(self, data, context):
         context = super(AddFirewallStep, self).contribute(data, context)
+        context['admin_state_up'] = (context['admin_state_up'] == 'True')
         return context
 
 
@@ -301,7 +338,7 @@ class AddFirewall(workflows.Workflow):
     # involve more complex configuration over time. Hence,
     # a workflow instead of a single form is used for
     # firewall_rule add to be ready for future extension.
-    default_steps = (AddFirewallStep,)
+    default_steps = (AddFirewallStep, )
 
     def format_status_message(self, message):
         return message % self.context.get('name')

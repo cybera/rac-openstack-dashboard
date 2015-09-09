@@ -20,12 +20,11 @@ from openstack_dashboard.api import fwaas
 from openstack_dashboard.api import lbaas
 from openstack_dashboard.api import neutron
 from openstack_dashboard.api import vpn
-
 from openstack_dashboard.test.test_data import utils
 
 
 def data(TEST):
-    # data returned by openstack_dashboard.api.neutron wrapper
+    # Data returned by openstack_dashboard.api.neutron wrapper.
     TEST.agents = utils.TestDataContainer()
     TEST.networks = utils.TestDataContainer()
     TEST.subnets = utils.TestDataContainer()
@@ -53,7 +52,7 @@ def data(TEST):
     TEST.fw_policies = utils.TestDataContainer()
     TEST.fw_rules = utils.TestDataContainer()
 
-    # data return by neutronclient
+    # Data return by neutronclient.
     TEST.api_agents = utils.TestDataContainer()
     TEST.api_networks = utils.TestDataContainer()
     TEST.api_subnets = utils.TestDataContainer()
@@ -79,8 +78,7 @@ def data(TEST):
     TEST.api_fw_policies = utils.TestDataContainer()
     TEST.api_fw_rules = utils.TestDataContainer()
 
-    #------------------------------------------------------------
-    # 1st network
+    # 1st network.
     network_dict = {'admin_state_up': True,
                     'id': '82288d84-e0a5-42ac-95be-e6af08727e42',
                     'name': 'net1',
@@ -111,19 +109,22 @@ def data(TEST):
     TEST.networks.add(neutron.Network(network))
     TEST.subnets.add(subnet)
 
-    # network profile for network when using the cisco n1k plugin
+    # Network profile for network when using the cisco n1k plugin.
     net_profile_dict = {'name': 'net_profile_test1',
                         'segment_type': 'vlan',
                         'physical_network': 'phys1',
                         'segment_range': '3000-3100',
                         'id':
                         '00000000-1111-1111-1111-000000000000',
-                        'project': network_dict['tenant_id']}
+                        'project': TEST.networks.get(name="net1")['tenant_id'],
+                        # vlan profiles have no sub_type or multicast_ip_range
+                        'multicast_ip_range': None,
+                        'sub_type': None}
 
     TEST.api_net_profiles.add(net_profile_dict)
     TEST.net_profiles.add(neutron.Profile(net_profile_dict))
 
-    # policy profile for port when using the cisco n1k plugin
+    # Policy profile for port when using the cisco n1k plugin.
     policy_profile_dict = {'name': 'policy_profile_test1',
                            'id':
                            '00000000-9999-9999-9999-000000000000'}
@@ -131,7 +132,7 @@ def data(TEST):
     TEST.api_policy_profiles.add(policy_profile_dict)
     TEST.policy_profiles.add(neutron.Profile(policy_profile_dict))
 
-    # network profile binding
+    # Network profile binding.
     network_profile_binding_dict = {'profile_id':
                                     '00000000-1111-1111-1111-000000000000',
                                     'tenant_id': network_dict['tenant_id']}
@@ -140,7 +141,7 @@ def data(TEST):
     TEST.network_profile_binding.add(neutron.Profile(
         network_profile_binding_dict))
 
-    # policy profile binding
+    # Policy profile binding.
     policy_profile_binding_dict = {'profile_id':
                                    '00000000-9999-9999-9999-000000000000',
                                    'tenant_id': network_dict['tenant_id']}
@@ -149,7 +150,7 @@ def data(TEST):
     TEST.policy_profile_binding.add(neutron.Profile(
         policy_profile_binding_dict))
 
-    # ports on 1st network
+    # Ports on 1st network.
     port_dict = {'admin_state_up': True,
                  'device_id': 'af75c8e5-a1cc-4567-8d04-44fcd6922890',
                  'device_owner': 'network:dhcp',
@@ -160,7 +161,10 @@ def data(TEST):
                  'name': '',
                  'network_id': network_dict['id'],
                  'status': 'ACTIVE',
-                 'tenant_id': network_dict['tenant_id']}
+                 'tenant_id': network_dict['tenant_id'],
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
+
     TEST.api_ports.add(port_dict)
     TEST.ports.add(neutron.Port(port_dict))
 
@@ -174,13 +178,30 @@ def data(TEST):
                  'name': '',
                  'network_id': network_dict['id'],
                  'status': 'ACTIVE',
-                 'tenant_id': network_dict['tenant_id']}
+                 'tenant_id': network_dict['tenant_id'],
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
     TEST.api_ports.add(port_dict)
     TEST.ports.add(neutron.Port(port_dict))
     assoc_port = port_dict
 
-    #------------------------------------------------------------
-    # 2nd network
+    port_dict = {'admin_state_up': True,
+                 'device_id': '279989f7-54bb-41d9-ba42-0d61f12fda61',
+                 'device_owner': 'network:router_interface',
+                 'fixed_ips': [{'ip_address': '10.0.0.1',
+                                'subnet_id': subnet_dict['id']}],
+                 'id': '9036eedb-e7fa-458e-bc6e-d9d06d9d1bc4',
+                 'mac_address': 'fa:16:3e:9c:d5:7f',
+                 'name': '',
+                 'network_id': network_dict['id'],
+                 'status': 'ACTIVE',
+                 'tenant_id': network_dict['tenant_id'],
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
+    TEST.api_ports.add(port_dict)
+    TEST.ports.add(neutron.Port(port_dict))
+
+    # 2nd network.
     network_dict = {'admin_state_up': True,
                     'id': '72c3ab6c-c80f-4341-9dc5-210fa31ac6c2',
                     'name': 'net2',
@@ -224,13 +245,14 @@ def data(TEST):
                  'name': '',
                  'network_id': network_dict['id'],
                  'status': 'ACTIVE',
-                 'tenant_id': network_dict['tenant_id']}
+                 'tenant_id': network_dict['tenant_id'],
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
 
     TEST.api_ports.add(port_dict)
     TEST.ports.add(neutron.Port(port_dict))
 
-    #------------------------------------------------------------
-    # external network
+    # External network.
     network_dict = {'admin_state_up': True,
                     'id': '9b466b94-213a-4cda-badf-72c102a874da',
                     'name': 'ext_net',
@@ -262,8 +284,71 @@ def data(TEST):
     TEST.networks.add(neutron.Network(network))
     TEST.subnets.add(subnet)
 
-    #------------------------------------------------------------
-    # Set up router data
+    # 1st v6 network.
+    network_dict = {'admin_state_up': True,
+                    'id': '96688ea1-ffa5-78ec-22ca-33aaabfaf775',
+                    'name': 'v6_net1',
+                    'status': 'ACTIVE',
+                    'subnets': ['88ddd443-4377-ab1f-87dd-4bc4a662dbb6'],
+                    'tenant_id': '1',
+                    'router:external': False,
+                    'shared': False}
+    subnet_dict = {'allocation_pools': [{'end': 'ff09::ff',
+                                         'start': 'ff09::02'}],
+                   'dns_nameservers': [],
+                   'host_routes': [],
+                   'cidr': 'ff09::/64',
+                   'enable_dhcp': True,
+                   'gateway_ip': 'ff09::1',
+                   'id': network_dict['subnets'][0],
+                   'ip_version': 6,
+                   'name': 'v6_subnet1',
+                   'network_id': network_dict['id'],
+                   'tenant_id': network_dict['tenant_id'],
+                   'ipv6_modes': 'none/none'}
+
+    TEST.api_networks.add(network_dict)
+    TEST.api_subnets.add(subnet_dict)
+
+    network = copy.deepcopy(network_dict)
+    subnet = neutron.Subnet(subnet_dict)
+    network['subnets'] = [subnet]
+    TEST.networks.add(neutron.Network(network))
+    TEST.subnets.add(subnet)
+
+    # 2nd v6 network - slaac.
+    network_dict = {'admin_state_up': True,
+                    'id': 'c62e4bb3-296a-4cd1-8f6b-aaa7a0092326',
+                    'name': 'v6_net2',
+                    'status': 'ACTIVE',
+                    'subnets': ['5d736a21-0036-4779-8f8b-eed5f98077ec'],
+                    'tenant_id': '1',
+                    'router:external': False,
+                    'shared': False}
+    subnet_dict = {'allocation_pools': [{'end': 'ff09::ff',
+                                         'start': 'ff09::02'}],
+                   'dns_nameservers': [],
+                   'host_routes': [],
+                   'cidr': 'ff09::/64',
+                   'enable_dhcp': True,
+                   'gateway_ip': 'ff09::1',
+                   'id': network_dict['subnets'][0],
+                   'ip_version': 6,
+                   'name': 'v6_subnet2',
+                   'network_id': network_dict['id'],
+                   'tenant_id': network_dict['tenant_id'],
+                   'ipv6_modes': 'slaac/slaac'}
+
+    TEST.api_networks.add(network_dict)
+    TEST.api_subnets.add(subnet_dict)
+
+    network = copy.deepcopy(network_dict)
+    subnet = neutron.Subnet(subnet_dict)
+    network['subnets'] = [subnet]
+    TEST.networks.add(neutron.Network(network))
+    TEST.subnets.add(subnet)
+
+    # Set up router data.
     port_dict = {'admin_state_up': True,
                  'device_id': '7180cede-bcd8-4334-b19f-f7ef2f331f53',
                  'device_owner': 'network:router_gateway',
@@ -272,14 +357,19 @@ def data(TEST):
                  'id': '44ec6726-4bdc-48c5-94d4-df8d1fbf613b',
                  'mac_address': 'fa:16:3e:9c:d5:7e',
                  'name': '',
-                 'network_id': network_dict['id'],
+                 'network_id': TEST.networks.get(name="ext_net")['id'],
                  'status': 'ACTIVE',
-                 'tenant_id': '1'}
+                 'tenant_id': '1',
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
     TEST.api_ports.add(port_dict)
     TEST.ports.add(neutron.Port(port_dict))
 
     router_dict = {'id': '279989f7-54bb-41d9-ba42-0d61f12fda61',
                    'name': 'router1',
+                   'status': 'ACTIVE',
+                   'admin_state_up': True,
+                   'distributed': True,
                    'external_gateway_info':
                        {'network_id': ext_net['id']},
                    'tenant_id': '1'}
@@ -287,13 +377,18 @@ def data(TEST):
     TEST.routers.add(neutron.Router(router_dict))
     router_dict = {'id': '10e3dc42-1ce1-4d48-87cf-7fc333055d6c',
                    'name': 'router2',
-                   'external_gateway_info':
-                       {'network_id': ext_net['id']},
+                   'status': 'ACTIVE',
+                   'admin_state_up': False,
+                   'distributed': False,
+                   'external_gateway_info': None,
                    'tenant_id': '1'}
     TEST.api_routers.add(router_dict)
     TEST.routers.add(neutron.Router(router_dict))
-    router_dict = {'id': '71fb25e9-cd9f-4a44-a780-85ec3bd8bdd7',
+    router_dict = {'id': '7180cede-bcd8-4334-b19f-f7ef2f331f53',
                    'name': 'rulerouter',
+                   'status': 'ACTIVE',
+                   'admin_state_up': True,
+                   'distributed': False,
                    'external_gateway_info':
                        {'network_id': ext_net['id']},
                    'tenant_id': '1',
@@ -310,9 +405,8 @@ def data(TEST):
     TEST.api_routers.add(router_dict)
     TEST.routers_with_rules.add(neutron.Router(router_dict))
 
-    #------------------------------------------------------------
-    # floating IP
-    # unassociated
+    # Floating IP.
+    # Unassociated.
     fip_dict = {'tenant_id': '1',
                 'floating_ip_address': '172.16.88.227',
                 'floating_network_id': ext_net['id'],
@@ -323,7 +417,7 @@ def data(TEST):
     TEST.api_q_floating_ips.add(fip_dict)
     TEST.q_floating_ips.add(neutron.FloatingIp(fip_dict))
 
-    # associated (with compute port on 1st network)
+    # Associated (with compute port on 1st network).
     fip_dict = {'tenant_id': '1',
                 'floating_ip_address': '172.16.88.228',
                 'floating_network_id': ext_net['id'],
@@ -334,8 +428,7 @@ def data(TEST):
     TEST.api_q_floating_ips.add(fip_dict)
     TEST.q_floating_ips.add(neutron.FloatingIp(fip_dict))
 
-    #------------------------------------------------------------
-    # security group
+    # Security group.
 
     sec_group_1 = {'tenant_id': '1',
                    'description': 'default',
@@ -414,21 +507,20 @@ def data(TEST):
     groups = [sec_group_1, sec_group_2, sec_group_3]
     sg_name_dict = dict([(sg['id'], sg['name']) for sg in groups])
     for sg in groups:
-        # Neutron API
+        # Neutron API.
         TEST.api_q_secgroups.add(sg)
         for rule in sg['security_group_rules']:
             TEST.api_q_secgroup_rules.add(copy.copy(rule))
-        # OpenStack Dashboard internaly API
+        # OpenStack Dashboard internaly API.
         TEST.q_secgroups.add(
             neutron.SecurityGroup(copy.deepcopy(sg), sg_name_dict))
         for rule in sg['security_group_rules']:
             TEST.q_secgroup_rules.add(
                 neutron.SecurityGroupRule(copy.copy(rule), sg_name_dict))
 
-    #------------------------------------------------------------
-    # LBaaS
+    # LBaaS.
 
-    # 1st pool
+    # 1st pool.
     pool_dict = {'id': '8913dde8-4915-4b90-8d3e-b95eeedb0d49',
                  'tenant_id': '1',
                  'vip_id': 'abcdef-c3eb-4fee-9763-12de3338041e',
@@ -437,14 +529,15 @@ def data(TEST):
                  'subnet_id': TEST.subnets.first().id,
                  'protocol': 'HTTP',
                  'lb_method': 'ROUND_ROBIN',
-                 'health_monitors': ['d4a0500f-db2b-4cc4-afcf-ec026febff96'],
+                 'health_monitors': TEST.monitors.list(),
+                 'members': ['78a46e5e-eb1a-418a-88c7-0e3f5968b08'],
                  'admin_state_up': True,
                  'status': 'ACTIVE',
                  'provider': 'haproxy'}
     TEST.api_pools.add(pool_dict)
     TEST.pools.add(lbaas.Pool(pool_dict))
 
-    # 2nd pool
+    # 2nd pool.
     pool_dict = {'id': '8913dde8-4915-4b90-8d3e-b95eeedb0d50',
                  'tenant_id': '1',
                  'vip_id': 'f0881d38-c3eb-4fee-9763-12de3338041d',
@@ -453,20 +546,20 @@ def data(TEST):
                  'subnet_id': TEST.subnets.first().id,
                  'protocol': 'HTTPS',
                  'lb_method': 'ROUND_ROBIN',
-                 'health_monitors': ['d4a0500f-db2b-4cc4-afcf-ec026febff97'],
+                 'health_monitors': TEST.monitors.list()[0:1],
+                 'members': [],
                  'status': 'PENDING_CREATE',
                  'admin_state_up': True}
     TEST.api_pools.add(pool_dict)
     TEST.pools.add(lbaas.Pool(pool_dict))
 
-    # 1st vip
+    # 1st vip.
     vip_dict = {'id': 'abcdef-c3eb-4fee-9763-12de3338041e',
                 'name': 'vip1',
                 'address': '10.0.0.100',
-                'floatip_address': '',
-                'other_address': '10.0.0.100',
                 'description': 'vip description',
                 'subnet_id': TEST.subnets.first().id,
+                'port_id': TEST.ports.first().id,
                 'subnet': TEST.subnets.first().cidr,
                 'protocol_port': 80,
                 'protocol': pool_dict['protocol'],
@@ -478,14 +571,13 @@ def data(TEST):
     TEST.api_vips.add(vip_dict)
     TEST.vips.add(lbaas.Vip(vip_dict))
 
-    # 2nd vip
+    # 2nd vip.
     vip_dict = {'id': 'f0881d38-c3eb-4fee-9763-12de3338041d',
                 'name': 'vip2',
                 'address': '10.0.0.110',
-                'floatip_address': '',
-                'other_address': '10.0.0.110',
                 'description': 'vip description',
                 'subnet_id': TEST.subnets.first().id,
+                'port_id': TEST.ports.list()[0].id,
                 'subnet': TEST.subnets.first().cidr,
                 'protocol_port': 80,
                 'protocol': pool_dict['protocol'],
@@ -497,7 +589,7 @@ def data(TEST):
     TEST.api_vips.add(vip_dict)
     TEST.vips.add(lbaas.Vip(vip_dict))
 
-    # 1st member
+    # 1st member.
     member_dict = {'id': '78a46e5e-eb1a-418a-88c7-0e3f5968b08',
                    'tenant_id': '1',
                    'pool_id': pool_dict['id'],
@@ -509,46 +601,47 @@ def data(TEST):
     TEST.api_members.add(member_dict)
     TEST.members.add(lbaas.Member(member_dict))
 
-    # 2nd member
+    # 2nd member.
     member_dict = {'id': '41ac1f8d-6d9c-49a4-a1bf-41955e651f91',
-                  'tenant_id': '1',
-                  'pool_id': pool_dict['id'],
-                  'address': '10.0.0.12',
-                  'protocol_port': 80,
-                  'weight': 10,
-                  'status': 'ACTIVE',
-                  'admin_state_up': True}
+                   'tenant_id': '1',
+                   'pool_id': pool_dict['id'],
+                   'address': '10.0.0.12',
+                   'protocol_port': 80,
+                   'weight': 10,
+                   'status': 'ACTIVE',
+                   'admin_state_up': True}
     TEST.api_members.add(member_dict)
     TEST.members.add(lbaas.Member(member_dict))
 
-    # 1st monitor
+    # 1st monitor.
     monitor_dict = {'id': 'd4a0500f-db2b-4cc4-afcf-ec026febff96',
-                    'type': 'ping',
+                    'type': 'http',
                     'delay': 10,
                     'timeout': 10,
                     'max_retries': 10,
                     'http_method': 'GET',
                     'url_path': '/',
                     'expected_codes': '200',
-                    'admin_state_up': True}
+                    'admin_state_up': True,
+                    "pools": [{"pool_id": TEST.pools.list()[0].id},
+                              {"pool_id": TEST.pools.list()[1].id}],
+                    }
     TEST.api_monitors.add(monitor_dict)
     TEST.monitors.add(lbaas.PoolMonitor(monitor_dict))
 
-    # 2nd monitor
+    # 2nd monitor.
     monitor_dict = {'id': 'd4a0500f-db2b-4cc4-afcf-ec026febff97',
                     'type': 'ping',
                     'delay': 10,
                     'timeout': 10,
                     'max_retries': 10,
-                    'http_method': 'GET',
-                    'url_path': '/',
-                    'expected_codes': '200',
-                    'admin_state_up': True}
+                    'admin_state_up': True,
+                    'pools': [],
+                    }
     TEST.api_monitors.add(monitor_dict)
     TEST.monitors.add(lbaas.PoolMonitor(monitor_dict))
 
-    #------------------------------------------------------------
-    # Quotas
+    # Quotas.
     quota_data = {'network': '10',
                   'subnet': '10',
                   'port': '50',
@@ -559,19 +652,34 @@ def data(TEST):
                   }
     TEST.neutron_quotas.add(base.QuotaSet(quota_data))
 
-    #------------------------------------------------------------
-    # Extensions
+    # Extensions.
     extension_1 = {"name": "security-group",
                    "alias": "security-group",
                    "description": "The security groups extension."}
     extension_2 = {"name": "Quota management support",
                    "alias": "quotas",
                    "description": "Expose functions for quotas management"}
+    extension_3 = {"name": "Provider network",
+                   "alias": "provider",
+                   "description": "Provider network extension"}
+    extension_4 = {"name": "Distributed Virtual Router",
+                   "alias": "dvr",
+                   "description":
+                   "Enables configuration of Distributed Virtual Routers."}
+    extension_5 = {"name": "HA Router extension",
+                   "alias": "l3-ha",
+                   "description": "Add HA capability to routers."}
+    extension_6 = {"name": "LoadBalancing service",
+                   "alias": "lbaas",
+                   "description": "Extension for LoadBalancing service"}
     TEST.api_extensions.add(extension_1)
     TEST.api_extensions.add(extension_2)
+    TEST.api_extensions.add(extension_3)
+    TEST.api_extensions.add(extension_4)
+    TEST.api_extensions.add(extension_5)
+    TEST.api_extensions.add(extension_6)
 
-    #------------------------------------------------------------
-    # 1st agent
+    # 1st agent.
     agent_dict = {"binary": "neutron-openvswitch-agent",
                   "description": None,
                   "admin_state_up": True,
@@ -587,7 +695,7 @@ def data(TEST):
     TEST.api_agents.add(agent_dict)
     TEST.agents.add(neutron.Agent(agent_dict))
 
-    # 2nd agent
+    # 2nd agent.
     agent_dict = {"binary": "neutron-dhcp-agent",
                   "description": None,
                   "admin_state_up": True,
@@ -609,17 +717,15 @@ def data(TEST):
     TEST.api_agents.add(agent_dict)
     TEST.agents.add(neutron.Agent(agent_dict))
 
-    #------------------------------------------------------------
-    # Service providers
+    # Service providers.
     provider_1 = {"service_type": "LOADBALANCER",
                   "name": "haproxy",
                   "default": True}
     TEST.providers.add(provider_1)
 
-    #------------------------------------------------------------
-    # VPNaaS
+    # VPNaaS.
 
-    # 1st VPNService
+    # 1st VPNService.
     vpnservice_dict = {'id': '09a26949-6231-4f72-942a-0c8c0ddd4d61',
                        'tenant_id': '1',
                        'name': 'cloud_vpn1',
@@ -634,7 +740,7 @@ def data(TEST):
     TEST.api_vpnservices.add(vpnservice_dict)
     TEST.vpnservices.add(vpn.VPNService(vpnservice_dict))
 
-    # 2nd VPNService
+    # 2nd VPNService.
     vpnservice_dict = {'id': '09a26949-6231-4f72-942a-0c8c0ddd4d62',
                        'tenant_id': '1',
                        'name': 'cloud_vpn2',
@@ -681,77 +787,78 @@ def data(TEST):
 
     # 1st IPSecPolicy
     ipsecpolicy_dict = {'id': '8376e1dd-2b1c-4346-b23c-6989e75ecdb8',
-                      'tenant_id': '1',
-                      'name': 'ipsecpolicy_1',
-                      'description': 'ipsecpolicy description',
-                      'auth_algorithm': 'sha1',
-                      'encapsulation_mode': 'tunnel',
-                      'encryption_algorithm': '3des',
-                      'lifetime': {'units': 'seconds', 'value': 3600},
-                      'pfs': 'group5',
-                      'transform_protocol': 'esp',
-                      'ipsecsiteconns': TEST.ipsecsiteconnections.list()}
+                        'tenant_id': '1',
+                        'name': 'ipsecpolicy_1',
+                        'description': 'ipsecpolicy description',
+                        'auth_algorithm': 'sha1',
+                        'encapsulation_mode': 'tunnel',
+                        'encryption_algorithm': '3des',
+                        'lifetime': {'units': 'seconds', 'value': 3600},
+                        'pfs': 'group5',
+                        'transform_protocol': 'esp',
+                        'ipsecsiteconns': TEST.ipsecsiteconnections.list()}
     TEST.api_ipsecpolicies.add(ipsecpolicy_dict)
     TEST.ipsecpolicies.add(vpn.IPSecPolicy(ipsecpolicy_dict))
 
     # 2nd IPSecPolicy
     ipsecpolicy_dict = {'id': '8376e1dd-2b1c-4346-b23c-6989e75ecdb9',
-                      'tenant_id': '1',
-                      'name': 'ipsecpolicy_2',
-                      'description': 'ipsecpolicy description',
-                      'auth_algorithm': 'sha1',
-                      'encapsulation_mode': 'tunnel',
-                      'encryption_algorithm': '3des',
-                      'lifetime': {'units': 'seconds', 'value': 3600},
-                      'pfs': 'group5',
-                      'transform_protocol': 'esp',
-                      'ipsecsiteconns': []}
+                        'tenant_id': '1',
+                        'name': 'ipsecpolicy_2',
+                        'description': 'ipsecpolicy description',
+                        'auth_algorithm': 'sha1',
+                        'encapsulation_mode': 'tunnel',
+                        'encryption_algorithm': '3des',
+                        'lifetime': {'units': 'seconds', 'value': 3600},
+                        'pfs': 'group5',
+                        'transform_protocol': 'esp',
+                        'ipsecsiteconns': []}
     TEST.api_ipsecpolicies.add(ipsecpolicy_dict)
     TEST.ipsecpolicies.add(vpn.IPSecPolicy(ipsecpolicy_dict))
 
     # 1st IPSecSiteConnection
     ipsecsiteconnection_dict = {'id': 'dd1dd3a0-f349-49be-b013-245e147763d6',
-                          'tenant_id': '1',
-                          'name': 'ipsec_connection_1',
-                          'description': 'vpn connection description',
-                          'dpd': {'action': 'hold',
-                                  'interval': 30,
-                                  'timeout': 120},
-                          'ikepolicy_id': ikepolicy_dict['id'],
-                          'initiator': 'bi-directional',
-                          'ipsecpolicy_id': ipsecpolicy_dict['id'],
-                          'mtu': 1500,
-                          'peer_address':
-                              '2607:f0d0:4545:3:200:f8ff:fe21:67cf',
-                          'peer_cidrs': ['20.1.0.0/24', '21.1.0.0/24'],
-                          'peer_id': '2607:f0d0:4545:3:200:f8ff:fe21:67cf',
-                          'psk': 'secret',
-                          'vpnservice_id': vpnservice_dict['id'],
-                          'admin_state_up': True,
-                          'status': 'Active'}
+                                'tenant_id': '1',
+                                'name': 'ipsec_connection_1',
+                                'description': 'vpn connection description',
+                                'dpd': {'action': 'hold',
+                                        'interval': 30,
+                                        'timeout': 120},
+                                'ikepolicy_id': ikepolicy_dict['id'],
+                                'initiator': 'bi-directional',
+                                'ipsecpolicy_id': ipsecpolicy_dict['id'],
+                                'mtu': 1500,
+                                'peer_address':
+                                '2607:f0d0:4545:3:200:f8ff:fe21:67cf',
+                                'peer_cidrs': ['20.1.0.0/24', '21.1.0.0/24'],
+                                'peer_id':
+                                    '2607:f0d0:4545:3:200:f8ff:fe21:67cf',
+                                'psk': 'secret',
+                                'vpnservice_id': vpnservice_dict['id'],
+                                'admin_state_up': True,
+                                'status': 'Active'}
     TEST.api_ipsecsiteconnections.add(ipsecsiteconnection_dict)
     TEST.ipsecsiteconnections.add(
         vpn.IPSecSiteConnection(ipsecsiteconnection_dict))
 
     # 2nd IPSecSiteConnection
     ipsecsiteconnection_dict = {'id': 'dd1dd3a0-f349-49be-b013-245e147763d7',
-                          'tenant_id': '1',
-                          'name': 'ipsec_connection_2',
-                          'description': 'vpn connection description',
-                          'dpd': {'action': 'hold',
-                                  'interval': 30,
-                                  'timeout': 120},
-                          'ikepolicy_id': ikepolicy_dict['id'],
-                          'initiator': 'bi-directional',
-                          'ipsecpolicy_id': ipsecpolicy_dict['id'],
-                          'mtu': 1500,
-                          'peer_address': '172.0.0.2',
-                          'peer_cidrs': ['20.1.0.0/24'],
-                          'peer_id': '172.0.0.2',
-                          'psk': 'secret',
-                          'vpnservice_id': vpnservice_dict['id'],
-                          'admin_state_up': True,
-                          'status': 'Active'}
+                                'tenant_id': '1',
+                                'name': 'ipsec_connection_2',
+                                'description': 'vpn connection description',
+                                'dpd': {'action': 'hold',
+                                        'interval': 30,
+                                        'timeout': 120},
+                                'ikepolicy_id': ikepolicy_dict['id'],
+                                'initiator': 'bi-directional',
+                                'ipsecpolicy_id': ipsecpolicy_dict['id'],
+                                'mtu': 1500,
+                                'peer_address': '172.0.0.2',
+                                'peer_cidrs': ['20.1.0.0/24'],
+                                'peer_id': '172.0.0.2',
+                                'psk': 'secret',
+                                'vpnservice_id': vpnservice_dict['id'],
+                                'admin_state_up': True,
+                                'status': 'Active'}
     TEST.api_ipsecsiteconnections.add(ipsecsiteconnection_dict)
     TEST.ipsecsiteconnections.add(
         vpn.IPSecSiteConnection(ipsecsiteconnection_dict))
@@ -805,7 +912,7 @@ def data(TEST):
                   'tenant_id': '1',
                   'name': 'rule3',
                   'description': 'rule3 description',
-                  'protocol': 'icmp',
+                  'protocol': None,
                   'action': 'allow',
                   'source_ip_address': '1.2.3.0/24',
                   'source_port': '80',
@@ -860,6 +967,7 @@ def data(TEST):
                 'firewall_policy_id':
                     'abcdef-c3eb-4fee-9763-12de3338041e',
                 'name': 'firewall1',
+                'router_ids': [TEST.routers.first().id],
                 'description': 'firewall description',
                 'status': 'PENDING_CREATE',
                 'shared': True,
@@ -868,6 +976,7 @@ def data(TEST):
 
     fw1 = fwaas.Firewall(copy.deepcopy(fw1_dict))
     fw1._apidict['policy'] = policy1
+    fw1._apidict['routers'] = [TEST.routers.first()]
     TEST.firewalls.add(fw1)
 
     # 2nd firewall (no name)
@@ -886,11 +995,10 @@ def data(TEST):
     fw2._apidict['policy'] = policy1
     TEST.firewalls.add(fw1)
 
-    #------------------------------------------------------------
-    # Additional Cisco N1K profiles
+    # Additional Cisco N1K profiles.
 
-    # 2nd network profile for network when using the cisco n1k plugin
-    # Profile applied on 1st network
+    # 2nd network profile for network when using the cisco n1k plugin.
+    # Profile applied on 1st network.
     net_profile_dict = {'name': 'net_profile_test2',
                         'segment_type': 'overlay',
                         'sub_type': 'native_vxlan',
@@ -898,12 +1006,14 @@ def data(TEST):
                         'multicast_ip_range': '144.0.0.0-144.0.0.100',
                         'id':
                         '00000000-2222-2222-2222-000000000000',
-                        'project': '1'}
+                        'project': '1',
+                        # overlay profiles have no physical_network
+                        'physical_network': None}
 
     TEST.api_net_profiles.add(net_profile_dict)
     TEST.net_profiles.add(neutron.Profile(net_profile_dict))
 
-    # 2nd network profile binding
+    # 2nd network profile binding.
     network_profile_binding_dict = {'profile_id':
                                     '00000000-2222-2222-2222-000000000000',
                                     'tenant_id': '1'}
@@ -955,3 +1065,98 @@ def data(TEST):
     TEST.api_network_profile_binding.add(network_profile_binding_dict)
     TEST.network_profile_binding.add(neutron.Profile(
         network_profile_binding_dict))
+
+    # Adding a new network and new network and policy profile
+    # similar to the first to test launching an instance with multiple
+    # nics and multiple profiles.
+
+    # 4th network to use for testing instances with multiple-nics & profiles
+    network_dict = {'admin_state_up': True,
+                    'id': '7aa23d91-ffff-abab-dcdc-3411ae767e8a',
+                    'name': 'net4',
+                    'status': 'ACTIVE',
+                    'subnets': ['31be4a21-aadd-73da-6422-821ff249a4bb'],
+                    'tenant_id': '1',
+                    'router:external': False,
+                    'shared': False}
+    subnet_dict = {'allocation_pools': [{'end': '11.10.0.254',
+                                         'start': '11.10.0.2'}],
+                   'dns_nameservers': [],
+                   'host_routes': [],
+                   'cidr': '11.10.0.0/24',
+                   'enable_dhcp': True,
+                   'gateway_ip': '11.10.0.1',
+                   'id': network_dict['subnets'][0],
+                   'ip_version': 4,
+                   'name': 'mysubnet4',
+                   'network_id': network_dict['id'],
+                   'tenant_id': network_dict['tenant_id']}
+
+    TEST.api_networks.add(network_dict)
+    TEST.api_subnets.add(subnet_dict)
+
+    network = copy.deepcopy(network_dict)
+    subnet = neutron.Subnet(subnet_dict)
+    network['subnets'] = [subnet]
+    TEST.networks.add(neutron.Network(network))
+    TEST.subnets.add(subnet)
+
+    # 5th network profile for network when using the cisco n1k plugin
+    # Network Profile applied on 4th network
+    net_profile_dict = {'name': 'net_profile_test5',
+                        'segment_type': 'vlan',
+                        'physical_network': 'phys5',
+                        'segment_range': '400-450',
+                        'id':
+                        '00000000-5555-5555-5555-000000000000',
+                        'project': TEST.networks.get(name="net4")['tenant_id']}
+
+    TEST.api_net_profiles.add(net_profile_dict)
+    TEST.net_profiles.add(neutron.Profile(net_profile_dict))
+
+    # 2nd policy profile for port when using the cisco n1k plugin
+    policy_profile_dict = {'name': 'policy_profile_test2',
+                           'id':
+                           '11111111-9999-9999-9999-111111111111'}
+
+    TEST.api_policy_profiles.add(policy_profile_dict)
+    TEST.policy_profiles.add(neutron.Profile(policy_profile_dict))
+
+    # network profile binding
+    network_profile_binding_dict = {'profile_id':
+                                    '00000000-5555-5555-5555-000000000000',
+                                    'tenant_id':
+                                    TEST.networks.get(name="net4")['tenant_id']
+                                    }
+
+    TEST.api_network_profile_binding.add(network_profile_binding_dict)
+    TEST.network_profile_binding.add(neutron.Profile(
+        network_profile_binding_dict))
+
+    # policy profile binding
+    policy_profile_binding_dict = {'profile_id':
+                                   '11111111-9999-9999-9999-111111111111',
+                                   'tenant_id':
+                                   TEST.networks.get(name="net4")['tenant_id']}
+
+    TEST.api_policy_profile_binding.add(policy_profile_binding_dict)
+    TEST.policy_profile_binding.add(neutron.Profile(
+        policy_profile_binding_dict))
+
+    # ports on 4th network
+    port_dict = {'admin_state_up': True,
+                 'device_id': '9872faaa-b2b2-eeee-9911-21332eedaa77',
+                 'device_owner': 'network:dhcp',
+                 'fixed_ips': [{'ip_address': '11.10.0.3',
+                                'subnet_id':
+                                TEST.subnets.get(name="mysubnet4")['id']}],
+                 'id': 'a21dcd22-6733-cccc-aa32-22adafaf16a2',
+                 'mac_address': '78:22:ff:1a:ba:23',
+                 'name': 'port5',
+                 'network_id': TEST.networks.get(name="net4")['id'],
+                 'status': 'ACTIVE',
+                 'tenant_id': TEST.networks.get(name="net4")['tenant_id'],
+                 'binding:vnic_type': 'normal',
+                 'binding:host_id': 'host'}
+    TEST.api_ports.add(port_dict)
+    TEST.ports.add(neutron.Port(port_dict))

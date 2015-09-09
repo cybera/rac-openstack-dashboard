@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013, Mirantis Inc
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,14 +11,11 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: Tatiana Mazur
 
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
 from horizon import forms
-from horizon.utils import fields
 from horizon import workflows
 
 from openstack_dashboard import api
@@ -33,8 +28,10 @@ class AddVPNServiceAction(workflows.Action):
         max_length=80, label=_("Description"))
     router_id = forms.ChoiceField(label=_("Router"))
     subnet_id = forms.ChoiceField(label=_("Subnet"))
-    admin_state_up = forms.BooleanField(label=_("Admin State"),
-                                        initial=True, required=False)
+    admin_state_up = forms.ChoiceField(choices=[(True, _('UP')),
+                                                (False, _('DOWN'))],
+                                       label=_("Admin State"),
+                                       help_text=_("The state to start in."))
 
     def __init__(self, request, *args, **kwargs):
         super(AddVPNServiceAction, self).__init__(request, *args, **kwargs)
@@ -68,12 +65,12 @@ class AddVPNServiceAction(workflows.Action):
         self.fields['router_id'].choices = router_id_choices
         return router_id_choices
 
-    class Meta:
+    class Meta(object):
         name = _("Add New VPN Service")
         permissions = ('openstack.services.network',)
         help_text = _("Create VPN Service for current project.\n\n"
-                      "Assign a name and description for the VPN Service. "
-                      "Select a router and a subnet. "
+                      "Specify a name, description, router, and subnet "
+                      "for the VPN Service. "
                       "Admin State is Up (checked) by default."
                       )
 
@@ -121,7 +118,7 @@ class AddIKEPolicyAction(workflows.Action):
     lifetime_value = forms.IntegerField(
         min_value=60, label=_("Lifetime value for IKE keys"),
         initial=3600,
-        help_text=_("Equal to or more than 60"))
+        help_text=_("Equal to or greater than 60"))
     pfs = forms.ChoiceField(label=_("Perfect Forward Secrecy"))
     phase1_negotiation_mode = forms.ChoiceField(
         label=_("IKE Phase1 negotiation mode"))
@@ -163,7 +160,7 @@ class AddIKEPolicyAction(workflows.Action):
         # Currently this field has only one choice, so mark it as readonly.
         self.fields['phase1_negotiation_mode'].widget.attrs['readonly'] = True
 
-    class Meta:
+    class Meta(object):
         name = _("Add New IKE Policy")
         permissions = ('openstack.services.network',)
         help_text = _("Create IKE Policy for current project.\n\n"
@@ -180,8 +177,8 @@ class AddIKEPolicyStep(workflows.Step):
 
     def contribute(self, data, context):
         context = super(AddIKEPolicyStep, self).contribute(data, context)
-        context.update({'lifetime': {'units': data['lifetime_units'],
-                                     'value': data['lifetime_value']}})
+        context['lifetime'] = {'units': data['lifetime_units'],
+                               'value': data['lifetime_value']}
         context.pop('lifetime_units')
         context.pop('lifetime_value')
         if data:
@@ -220,7 +217,7 @@ class AddIPSecPolicyAction(workflows.Action):
     lifetime_value = forms.IntegerField(
         min_value=60, label=_("Lifetime value for IKE keys "),
         initial=3600,
-        help_text=_("Equal to or more than 60"))
+        help_text=_("Equal to or greater than 60"))
     pfs = forms.ChoiceField(label=_("Perfect Forward Secrecy"))
     transform_protocol = forms.ChoiceField(label=_("Transform Protocol"))
 
@@ -260,7 +257,7 @@ class AddIPSecPolicyAction(workflows.Action):
                                       ("ah-esp", "ah-esp")]
         self.fields['transform_protocol'].choices = transform_protocol_choices
 
-    class Meta:
+    class Meta(object):
         name = _("Add New IPSec Policy")
         permissions = ('openstack.services.network',)
         help_text = _("Create IPSec Policy for current project.\n\n"
@@ -277,8 +274,8 @@ class AddIPSecPolicyStep(workflows.Step):
 
     def contribute(self, data, context):
         context = super(AddIPSecPolicyStep, self).contribute(data, context)
-        context.update({'lifetime': {'units': data['lifetime_units'],
-                                     'value': data['lifetime_value']}})
+        context['lifetime'] = {'units': data['lifetime_units'],
+                               'value': data['lifetime_value']}
         context.pop('lifetime_units')
         context.pop('lifetime_value')
         if data:
@@ -316,25 +313,25 @@ class AddIPSecSiteConnectionAction(workflows.Action):
         label=_("IKE Policy associated with this connection"))
     ipsecpolicy_id = forms.ChoiceField(
         label=_("IPSec Policy associated with this connection"))
-    peer_address = fields.IPField(
+    peer_address = forms.IPField(
         label=_("Peer gateway public IPv4/IPv6 Address or FQDN"),
         help_text=_("Peer gateway public IPv4/IPv6 address or FQDN for "
                     "the VPN Connection"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=False)
-    peer_id = fields.IPField(
+    peer_id = forms.IPField(
         label=_("Peer router identity for authentication (Peer ID)"),
         help_text=_("Peer router identity for authentication. "
                     "Can be IPv4/IPv6 address, e-mail, key ID, or FQDN"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=False)
-    peer_cidrs = fields.MultiIPField(
+    peer_cidrs = forms.MultiIPField(
         label=_("Remote peer subnet(s)"),
         help_text=_("Remote peer subnet(s) address(es) "
                     "with mask(s) in CIDR format "
                     "separated with commas if needed "
                     "(e.g. 20.1.0.0/24, 21.1.0.0/24)"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=True)
     psk = forms.CharField(max_length=80,
                           label=_("Pre-Shared Key (PSK) string"))
@@ -382,7 +379,7 @@ class AddIPSecSiteConnectionAction(workflows.Action):
         self.fields['vpnservice_id'].choices = vpnservice_id_choices
         return vpnservice_id_choices
 
-    class Meta:
+    class Meta(object):
         name = _("Add New IPSec Site Connection")
         permissions = ('openstack.services.network',)
         help_text = _("Create IPSec Site Connection for current project.\n\n"
@@ -404,8 +401,9 @@ class AddIPSecSiteConnectionOptionalAction(workflows.Action):
         min_value=68,
         label=_("Maximum Transmission Unit size for the connection"),
         initial=1500,
-        help_text=_("Equal to or more than 68 if the local subnet is IPv4. "
-                    "Equal to or more than 1280 if the local subnet is IPv6."))
+        help_text=_("Equal to or greater than 68 if the local subnet is IPv4. "
+                    "Equal to or greater than 1280 if the local subnet "
+                    "is IPv6."))
     dpd_action = forms.ChoiceField(label=_("Dead peer detection actions"))
     dpd_interval = forms.IntegerField(
         min_value=1, label=_("Dead peer detection interval"),
@@ -416,8 +414,10 @@ class AddIPSecSiteConnectionOptionalAction(workflows.Action):
         initial=120,
         help_text=_("Valid integer greater than the DPD interval"))
     initiator = forms.ChoiceField(label=_("Initiator state"))
-    admin_state_up = forms.BooleanField(label=_("Admin State"),
-                                        initial=True, required=False)
+    admin_state_up = forms.ChoiceField(choices=[(True, _('UP')),
+                                                (False, _('DOWN'))],
+                                       label=_("Admin State"),
+                                       help_text=_("The state to start in."))
 
     def __init__(self, request, *args, **kwargs):
         super(AddIPSecSiteConnectionOptionalAction, self).__init__(
@@ -436,7 +436,7 @@ class AddIPSecSiteConnectionOptionalAction(workflows.Action):
         self.fields['dpd_action'].choices = dpd_action_choices
         return dpd_action_choices
 
-    class Meta:
+    class Meta(object):
         name = _("Optional Parameters")
         permissions = ('openstack.services.network',)
         help_text = _("Fields in this tab are optional. "
@@ -453,9 +453,9 @@ class AddIPSecSiteConnectionOptionalStep(workflows.Step):
     def contribute(self, data, context):
         context = super(
             AddIPSecSiteConnectionOptionalStep, self).contribute(data, context)
-        context.update({'dpd': {'action': data['dpd_action'],
-                                'interval': data['dpd_interval'],
-                                'timeout': data['dpd_timeout']}})
+        context['dpd'] = {'action': data['dpd_action'],
+                          'interval': data['dpd_interval'],
+                          'timeout': data['dpd_timeout']}
         context.pop('dpd_action')
         context.pop('dpd_interval')
         context.pop('dpd_timeout')

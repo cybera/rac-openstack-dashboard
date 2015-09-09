@@ -15,30 +15,41 @@
 import json
 import uuid
 
-from novaclient.v1_1 import aggregates
-from novaclient.v1_1 import availability_zones
-from novaclient.v1_1 import certs
-from novaclient.v1_1 import flavor_access
-from novaclient.v1_1 import flavors
-from novaclient.v1_1 import floating_ips
-from novaclient.v1_1 import hosts
-from novaclient.v1_1 import hypervisors
-from novaclient.v1_1 import keypairs
-from novaclient.v1_1 import quotas
-from novaclient.v1_1 import security_group_rules as rules
-from novaclient.v1_1 import security_groups as sec_groups
-from novaclient.v1_1 import servers
-from novaclient.v1_1 import services
-from novaclient.v1_1 import usage
-from novaclient.v1_1 import volume_snapshots as vol_snaps
-from novaclient.v1_1 import volume_types
-from novaclient.v1_1 import volumes
+from novaclient.v2 import aggregates
+from novaclient.v2 import availability_zones
+from novaclient.v2 import certs
+from novaclient.v2 import flavor_access
+from novaclient.v2 import flavors
+from novaclient.v2 import floating_ips
+from novaclient.v2 import hosts
+from novaclient.v2 import hypervisors
+from novaclient.v2 import keypairs
+from novaclient.v2 import quotas
+from novaclient.v2 import security_group_rules as rules
+from novaclient.v2 import security_groups as sec_groups
+from novaclient.v2 import servers
+from novaclient.v2 import services
+from novaclient.v2 import usage
+from novaclient.v2 import volume_snapshots as vol_snaps
+from novaclient.v2 import volume_types
+from novaclient.v2 import volumes
 
 from openstack_dashboard.api import base
 from openstack_dashboard.api import nova
 from openstack_dashboard.usage import quotas as usage_quotas
 
 from openstack_dashboard.test.test_data import utils
+
+
+class FlavorExtraSpecs(dict):
+    def __repr__(self):
+        return "<FlavorExtraSpecs %s>" % self._info
+
+    def __init__(self, info):
+        super(FlavorExtraSpecs, self).__init__()
+        self.__dict__.update(info)
+        self.update(info)
+        self._info = info
 
 
 SERVER_DATA = """
@@ -179,42 +190,62 @@ def data(TEST):
     TEST.api_floating_ips_uuid = utils.TestDataContainer()
 
     # Volumes
-    volume = volumes.Volume(volumes.VolumeManager(None),
-                            dict(id="41023e92-8008-4c8b-8059-7f2293ff3775",
-                                 name='test_volume',
-                                 status='available',
-                                 size=40,
-                                 display_name='Volume name',
-                                 created_at='2012-04-01 10:30:00',
-                                 volume_type=None,
-                                 attachments=[]))
-    nameless_volume = volumes.Volume(volumes.VolumeManager(None),
-                         dict(id="3b189ac8-9166-ac7f-90c9-16c8bf9e01ac",
-                              name='',
-                              status='in-use',
-                              size=10,
-                              display_name='',
-                              display_description='',
-                              device="/dev/hda",
-                              created_at='2010-11-21 18:34:25',
-                              volume_type='vol_type_1',
-                              attachments=[{"id": "1", "server_id": '1',
-                                            "device": "/dev/hda"}]))
-    attached_volume = volumes.Volume(volumes.VolumeManager(None),
-                         dict(id="8cba67c1-2741-6c79-5ab6-9c2bf8c96ab0",
-                              name='my_volume',
-                              status='in-use',
-                              size=30,
-                              display_name='My Volume',
-                              display_description='',
-                              device="/dev/hdk",
-                              created_at='2011-05-01 11:54:33',
-                              volume_type='vol_type_2',
-                              attachments=[{"id": "2", "server_id": '1',
-                                            "device": "/dev/hdk"}]))
+    volume = volumes.Volume(
+        volumes.VolumeManager(None),
+        {"id": "41023e92-8008-4c8b-8059-7f2293ff3775",
+         "name": 'test_volume',
+         "status": 'available',
+         "size": 40,
+         "display_name": 'Volume name',
+         "created_at": '2012-04-01 10:30:00',
+         "volume_type": None,
+         "attachments": []})
+    nameless_volume = volumes.Volume(
+        volumes.VolumeManager(None),
+        {"id": "3b189ac8-9166-ac7f-90c9-16c8bf9e01ac",
+         "name": '',
+         "status": 'in-use',
+         "size": 10,
+         "display_name": '',
+         "display_description": '',
+         "device": "/dev/hda",
+         "created_at": '2010-11-21 18:34:25',
+         "volume_type": 'vol_type_1',
+         "attachments": [{"id": "1", "server_id": '1',
+                          "device": "/dev/hda"}]})
+    attached_volume = volumes.Volume(
+        volumes.VolumeManager(None),
+        {"id": "8cba67c1-2741-6c79-5ab6-9c2bf8c96ab0",
+         "name": 'my_volume',
+         "status": 'in-use',
+         "size": 30,
+         "display_name": 'My Volume',
+         "display_description": '',
+         "device": "/dev/hdk",
+         "created_at": '2011-05-01 11:54:33',
+         "volume_type": 'vol_type_2',
+         "attachments": [{"id": "2", "server_id": '1',
+                          "device": "/dev/hdk"}]})
+    non_bootable_volume = volumes.Volume(
+        volumes.VolumeManager(None),
+        {"id": "41023e92-8008-4c8b-8059-7f2293ff3771",
+         "name": 'non_bootable_volume',
+         "status": 'available',
+         "size": 40,
+         "display_name": 'Non Bootable Volume',
+         "created_at": '2012-04-01 10:30:00',
+         "volume_type": None,
+         "attachments": []})
+
+    volume.bootable = 'true'
+    nameless_volume.bootable = 'true'
+    attached_volume.bootable = 'true'
+    non_bootable_volume.bootable = 'false'
+
     TEST.volumes.add(volume)
     TEST.volumes.add(nameless_volume)
     TEST.volumes.add(attached_volume)
+    TEST.volumes.add(non_bootable_volume)
 
     vol_type1 = volume_types.VolumeType(volume_types.VolumeTypeManager(None),
                                         {'id': 1,
@@ -255,15 +286,29 @@ def data(TEST):
                                'extra_specs': {},
                                'os-flavor-access:is_public': False,
                                'OS-FLV-EXT-DATA:ephemeral': 2048})
-    TEST.flavors.add(flavor_1, flavor_2, flavor_3)
+    flavor_4 = flavors.Flavor(flavors.FlavorManager(None),
+                              {'id': "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                               'name': 'm1.metadata',
+                               'vcpus': 1000,
+                               'disk': 1024,
+                               'ram': 10000,
+                               'swap': 0,
+                               'extra_specs': FlavorExtraSpecs(
+                                   {'key': 'key_mock',
+                                    'value': 'value_mock'}),
+                               'os-flavor-access:is_public': False,
+                               'OS-FLV-EXT-DATA:ephemeral': 2048})
+    TEST.flavors.add(flavor_1, flavor_2, flavor_3, flavor_4)
 
     flavor_access_manager = flavor_access.FlavorAccessManager(None)
-    flavor_access_1 = flavor_access.FlavorAccess(flavor_access_manager,
-            {"tenant_id": "1",
-             "flavor_id": "dddddddd-dddd-dddd-dddd-dddddddddddd"})
-    flavor_access_2 = flavor_access.FlavorAccess(flavor_access_manager,
-            {"tenant_id": "2",
-             "flavor_id": "dddddddd-dddd-dddd-dddd-dddddddddddd"})
+    flavor_access_1 = flavor_access.FlavorAccess(
+        flavor_access_manager,
+        {"tenant_id": "1",
+         "flavor_id": "dddddddd-dddd-dddd-dddd-dddddddddddd"})
+    flavor_access_2 = flavor_access.FlavorAccess(
+        flavor_access_manager,
+        {"tenant_id": "2",
+         "flavor_id": "dddddddd-dddd-dddd-dddd-dddddddddddd"})
     TEST.flavor_access.add(flavor_access_1, flavor_access_2)
 
     # Key pairs
@@ -381,6 +426,8 @@ def data(TEST):
                                   'quota': 20},
                         'floating_ips': {'used': 0,
                                          'quota': 10},
+                        'security_groups': {'used': 0,
+                                            'quota': 10},
                         'volumes': {'used': 0,
                                     'quota': 10}}
     quota_usage = usage_quotas.QuotaUsage()
@@ -434,7 +481,12 @@ def data(TEST):
                 "server_id": "3"})
     server_3 = servers.Server(servers.ServerManager(None),
                               json.loads(SERVER_DATA % vals)['server'])
-    TEST.servers.add(server_1, server_2, server_3)
+    vals.update({"name": "server_4",
+                 "status": "PAUSED",
+                 "server_id": "4"})
+    server_4 = servers.Server(servers.ServerManager(None),
+                              json.loads(SERVER_DATA % vals)['server'])
+    TEST.servers.add(server_1, server_2, server_3, server_4)
 
     # VNC Console Data
     console = {u'console': {u'url': u'http://example.com:6080/vnc_auto.html',
@@ -503,23 +555,25 @@ def data(TEST):
                     "flavor_disk": flavor_1.disk,
                     "flavor_ram": flavor_1.ram}
     usage_obj_2 = usage.Usage(usage.UsageManager(None),
-                               json.loads(USAGE_DATA % usage_2_vals))
+                              json.loads(USAGE_DATA % usage_2_vals))
     TEST.usages.add(usage_obj_2)
 
-    volume_snapshot = vol_snaps.Snapshot(vol_snaps.SnapshotManager(None),
-                        {'id': '40f3fabf-3613-4f5e-90e5-6c9a08333fc3',
-                         'display_name': 'test snapshot',
-                         'display_description': 'vol snap!',
-                         'size': 40,
-                         'status': 'available',
-                         'volume_id': '41023e92-8008-4c8b-8059-7f2293ff3775'})
-    volume_snapshot2 = vol_snaps.Snapshot(vol_snaps.SnapshotManager(None),
-                        {'id': 'a374cbb8-3f99-4c3f-a2ef-3edbec842e31',
-                         'display_name': '',
-                         'display_description': 'vol snap 2!',
-                         'size': 80,
-                         'status': 'available',
-                         'volume_id': '3b189ac8-9166-ac7f-90c9-16c8bf9e01ac'})
+    volume_snapshot = vol_snaps.Snapshot(
+        vol_snaps.SnapshotManager(None),
+        {'id': '40f3fabf-3613-4f5e-90e5-6c9a08333fc3',
+         'display_name': 'test snapshot',
+         'display_description': 'vol snap!',
+         'size': 40,
+         'status': 'available',
+         'volume_id': '41023e92-8008-4c8b-8059-7f2293ff3775'})
+    volume_snapshot2 = vol_snaps.Snapshot(
+        vol_snaps.SnapshotManager(None),
+        {'id': 'a374cbb8-3f99-4c3f-a2ef-3edbec842e31',
+         'display_name': '',
+         'display_description': 'vol snap 2!',
+         'size': 80,
+         'status': 'available',
+         'volume_id': '3b189ac8-9166-ac7f-90c9-16c8bf9e01ac'})
     TEST.volume_snapshots.add(volume_snapshot)
     TEST.volume_snapshots.add(volume_snapshot2)
 
@@ -529,26 +583,25 @@ def data(TEST):
     TEST.certs.add(certificate)
 
     # Availability Zones
-    TEST.availability_zones.add(
-        availability_zones.AvailabilityZone(
-            availability_zones.AvailabilityZoneManager(None),
-            {
-                'zoneName': 'nova',
-                'zoneState': {'available': True},
-                'hosts': {
-                    "host001": {
-                        "nova-network": {
-                            "active": True,
-                            "available": True
-                        }
-                    }
-                }
-            }
-        )
-    )
+    TEST.availability_zones.add(availability_zones.AvailabilityZone(
+        availability_zones.AvailabilityZoneManager(None),
+        {
+            'zoneName': 'nova',
+            'zoneState': {'available': True},
+            'hosts': {
+                "host001": {
+                    "nova-network": {
+                        "active": True,
+                        "available": True,
+                    },
+                },
+            },
+        },
+    ))
 
     # hypervisors
-    hypervisor_1 = hypervisors.Hypervisor(hypervisors.HypervisorManager(None),
+    hypervisor_1 = hypervisors.Hypervisor(
+        hypervisors.HypervisorManager(None),
         {
             "service": {"host": "devstack001", "id": 3},
             "vcpus_used": 1,
@@ -569,17 +622,19 @@ def data(TEST):
             "disk_available_least": 6,
             "local_gb": 29,
             "free_ram_mb": 500,
-            "id": 1
-        }
+            "id": 1,
+            "servers": [{"name": "test_name", "uuid": "test_uuid"}]
+        },
     )
 
-    hypervisor_2 = hypervisors.Hypervisor(hypervisors.HypervisorManager(None),
+    hypervisor_2 = hypervisors.Hypervisor(
+        hypervisors.HypervisorManager(None),
         {
             "service": {"host": "devstack002", "id": 4},
             "vcpus_used": 1,
             "hypervisor_type": "QEMU",
             "local_gb_used": 20,
-            "hypervisor_hostname": "devstack002",
+            "hypervisor_hostname": "devstack001",
             "memory_mb_used": 1500,
             "memory_mb": 2000,
             "current_workload": 0,
@@ -594,10 +649,12 @@ def data(TEST):
             "disk_available_least": 6,
             "local_gb": 29,
             "free_ram_mb": 500,
-            "id": 2
-        }
+            "id": 2,
+            "servers": [{"name": "test_name_2", "uuid": "test_uuid_2"}]
+        },
     )
-    hypervisor_3 = hypervisors.Hypervisor(hypervisors.HypervisorManager(None),
+    hypervisor_3 = hypervisors.Hypervisor(
+        hypervisors.HypervisorManager(None),
         {
             "service": {"host": "instance-host", "id": 5},
             "vcpus_used": 1,
@@ -618,8 +675,8 @@ def data(TEST):
             "disk_available_least": 6,
             "local_gb": 29,
             "free_ram_mb": 500,
-            "id": 3
-        }
+            "id": 3,
+        },
     )
     TEST.hypervisors.add(hypervisor_1)
     TEST.hypervisors.add(hypervisor_2)
@@ -638,98 +695,109 @@ def data(TEST):
             "disk_available_least": 12556,
             "local_gb": 12563,
             "free_ram_mb": 428014,
-            "memory_mb_used": 55296
+            "memory_mb_used": 55296,
         }
     }
 
     # Services
-    service_1 = services.Service(services.ServiceManager(None),
-        {
-            "status": "enabled",
-            "binary": "nova-conductor",
-            "zone": "internal",
-            "state": "up",
-            "updated_at": "2013-07-08T05:21:00.000000",
-            "host": "devstack001",
-            "disabled_reason": None
-        }
-    )
+    service_1 = services.Service(services.ServiceManager(None), {
+        "status": "enabled",
+        "binary": "nova-conductor",
+        "zone": "internal",
+        "state": "up",
+        "updated_at": "2013-07-08T05:21:00.000000",
+        "host": "devstack001",
+        "disabled_reason": None,
+    })
 
-    service_2 = services.Service(services.ServiceManager(None),
-        {
-            "status": "enabled",
-            "binary": "nova-compute",
-            "zone": "nova",
-            "state": "up",
-            "updated_at": "2013-07-08T05:20:51.000000",
-            "host": "devstack001",
-            "disabled_reason": None
-        }
-    )
+    service_2 = services.Service(services.ServiceManager(None), {
+        "status": "enabled",
+        "binary": "nova-compute",
+        "zone": "nova",
+        "state": "up",
+        "updated_at": "2013-07-08T05:20:51.000000",
+        "host": "devstack001",
+        "disabled_reason": None,
+    })
+
+    service_3 = services.Service(services.ServiceManager(None), {
+        "status": "enabled",
+        "binary": "nova-compute",
+        "zone": "nova",
+        "state": "down",
+        "updated_at": "2013-07-08T04:20:51.000000",
+        "host": "devstack002",
+        "disabled_reason": None,
+    })
+
+    service_4 = services.Service(services.ServiceManager(None), {
+        "status": "disabled",
+        "binary": "nova-compute",
+        "zone": "nova",
+        "state": "up",
+        "updated_at": "2013-07-08T04:20:51.000000",
+        "host": "devstack003",
+        "disabled_reason": None,
+    })
+
     TEST.services.add(service_1)
     TEST.services.add(service_2)
+    TEST.services.add(service_3)
+    TEST.services.add(service_4)
 
     # Aggregates
-    aggregate_1 = aggregates.Aggregate(aggregates.AggregateManager(None),
-        {
-            "name": "foo",
-            "availability_zone": "testing",
-            "deleted": 0,
-            "created_at": "2013-07-04T13:34:38.000000",
-            "updated_at": None,
-            "hosts": ["foo", "bar"],
-            "deleted_at": None,
-            "id": 1,
-            "metadata": {
-                "foo": "testing",
-                "bar": "testing"
-            }
-        }
-    )
+    aggregate_1 = aggregates.Aggregate(aggregates.AggregateManager(None), {
+        "name": "foo",
+        "availability_zone": "testing",
+        "deleted": 0,
+        "created_at": "2013-07-04T13:34:38.000000",
+        "updated_at": None,
+        "hosts": ["foo", "bar"],
+        "deleted_at": None,
+        "id": 1,
+        "metadata": {"foo": "testing", "bar": "testing"},
+    })
 
-    aggregate_2 = aggregates.Aggregate(aggregates.AggregateManager(None),
-        {
-            "name": "bar",
-            "availability_zone": "testing",
-            "deleted": 0,
-            "created_at": "2013-07-04T13:34:38.000000",
-            "updated_at": None,
-            "hosts": ["foo", "bar"],
-            "deleted_at": None,
-            "id": 2,
-            "metadata": {
-                "foo": "testing",
-                "bar": "testing"
-            }
-        }
-    )
+    aggregate_2 = aggregates.Aggregate(aggregates.AggregateManager(None), {
+        "name": "bar",
+        "availability_zone": "testing",
+        "deleted": 0,
+        "created_at": "2013-07-04T13:34:38.000000",
+        "updated_at": None,
+        "hosts": ["foo", "bar"],
+        "deleted_at": None,
+        "id": 2,
+        "metadata": {"foo": "testing", "bar": "testing"},
+    })
 
     TEST.aggregates.add(aggregate_1)
     TEST.aggregates.add(aggregate_2)
 
-    host1 = hosts.Host(hosts.HostManager(None),
-        {
-            "host_name": "devstack001",
-            "service": "compute",
-            "zone": "testing"
-        }
-    )
+    host1 = hosts.Host(hosts.HostManager(None), {
+        "host_name": "devstack001",
+        "service": "compute",
+        "zone": "testing",
+    })
 
-    host2 = hosts.Host(hosts.HostManager(None),
-        {
-            "host_name": "devstack002",
-            "service": "nova-conductor",
-            "zone": "testing"
-        }
-    )
+    host2 = hosts.Host(hosts.HostManager(None), {
+        "host_name": "devstack002",
+        "service": "nova-conductor",
+        "zone": "testing",
+    })
 
-    host3 = hosts.Host(hosts.HostManager(None),
-        {
-            "host_name": "devstack003",
-            "service": "compute",
-            "zone": "testing"
-        }
-    )
+    host3 = hosts.Host(hosts.HostManager(None), {
+        "host_name": "devstack003",
+        "service": "compute",
+        "zone": "testing",
+    })
+
+    host4 = hosts.Host(hosts.HostManager(None), {
+        "host_name": "devstack004",
+        "service": "compute",
+        "zone": "testing",
+    })
+
     TEST.hosts.add(host1)
     TEST.hosts.add(host2)
     TEST.hosts.add(host3)
+    TEST.hosts.add(host4)

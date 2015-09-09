@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -18,18 +16,23 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.project.access_and_security.keypairs \
     import views
 
 
-urlpatterns = patterns('',
+urlpatterns = patterns(
+    '',
     url(r'^create/$', views.CreateView.as_view(), name='create'),
     url(r'^import/$', views.ImportView.as_view(), name='import'),
     url(r'^(?P<keypair_name>[^/]+)/download/$', views.DownloadView.as_view(),
-            name='download'),
+        name='download'),
     url(r'^(?P<keypair_name>[^/]+)/generate/$', views.GenerateView.as_view(),
-            name='generate'),
+        name='generate'),
+    url(r'^(?P<keypair_name>[^/]+)/(?P<optional>[^/]+)/generate/$',
+        views.GenerateView.as_view(), name='generate'),
+    url(r'^(?P<keypair_name>[^/]+)/$', views.DetailView.as_view(),
+        name='detail'),
 )

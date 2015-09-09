@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -22,6 +20,8 @@ from horizon import tabs
 
 from openstack_dashboard import api
 
+from openstack_dashboard.dashboards.project.volumes.backups \
+    import tables as backups_tables
 from openstack_dashboard.dashboards.project.volumes.snapshots \
     import tables as vol_snapshot_tables
 from openstack_dashboard.dashboards.project.volumes.volumes \
@@ -49,9 +49,30 @@ class VolumeTableMixIn(object):
                                 "attachment information"))
             return []
 
-    def _set_attachments_string(self, volumes, instances):
+    def _get_volumes_ids_with_snapshots(self, search_opts=None):
+        try:
+            volume_ids = []
+            snapshots = api.cinder.volume_snapshot_list(
+                self.request, search_opts=search_opts)
+            if snapshots:
+                # extract out the volume ids
+                volume_ids = set([(s.volume_id) for s in snapshots])
+        except Exception:
+            exceptions.handle(self.request,
+                              _("Unable to retrieve snapshot list."))
+
+        return volume_ids
+
+    # set attachment string and if volume has snapshots
+    def _set_volume_attributes(self,
+                               volumes,
+                               instances,
+                               volume_ids_with_snapshots):
         instances = SortedDict([(inst.id, inst) for inst in instances])
         for volume in volumes:
+            if volume_ids_with_snapshots:
+                if volume.id in volume_ids_with_snapshots:
+                    setattr(volume, 'has_snapshot', True)
             for att in volume.attachments:
                 server_id = att.get('server_id', None)
                 att['instance'] = instances.get(server_id, None)
@@ -62,11 +83,14 @@ class VolumeTab(tabs.TableTab, VolumeTableMixIn):
     name = _("Volumes")
     slug = "volumes_tab"
     template_name = ("horizon/common/_detail_table.html")
+    preload = False
 
     def get_volumes_data(self):
         volumes = self._get_volumes()
         instances = self._get_instances()
-        self._set_attachments_string(volumes, instances)
+        volume_ids_with_snapshots = self._get_volumes_ids_with_snapshots()
+        self._set_volume_attributes(
+            volumes, instances, volume_ids_with_snapshots)
         return volumes
 
 
@@ -75,6 +99,7 @@ class SnapshotTab(tabs.TableTab):
     name = _("Volume Snapshots")
     slug = "snapshots_tab"
     template_name = ("horizon/common/_detail_table.html")
+    preload = False
 
     def get_volume_snapshots_data(self):
         if api.base.is_service_enabled(self.request, 'volume'):
@@ -97,7 +122,31 @@ class SnapshotTab(tabs.TableTab):
         return snapshots
 
 
+class BackupsTab(tabs.TableTab, VolumeTableMixIn):
+    table_classes = (backups_tables.BackupsTable,)
+    name = _("Volume Backups")
+    slug = "backups_tab"
+    template_name = ("horizon/common/_detail_table.html")
+    preload = False
+
+    def allowed(self, request):
+        return api.cinder.volume_backup_supported(self.request)
+
+    def get_volume_backups_data(self):
+        try:
+            backups = api.cinder.volume_backup_list(self.request)
+            volumes = api.cinder.volume_list(self.request)
+            volumes = dict((v.id, v) for v in volumes)
+            for backup in backups:
+                backup.volume = volumes.get(backup.volume_id)
+        except Exception:
+            backups = []
+            exceptions.handle(self.request, _("Unable to retrieve "
+                                              "volume backups."))
+        return backups
+
+
 class VolumeAndSnapshotTabs(tabs.TabGroup):
     slug = "volumes_and_snapshots"
-    tabs = (VolumeTab, SnapshotTab,)
+    tabs = (VolumeTab, SnapshotTab, BackupsTab)
     sticky = True

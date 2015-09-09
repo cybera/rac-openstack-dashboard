@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -22,8 +20,9 @@
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
-from horizon import messages
 from horizon import tabs
+
+from neutronclient.common import exceptions as neutron_exc
 
 from openstack_dashboard.api import keystone
 from openstack_dashboard.api import network
@@ -44,10 +43,14 @@ class SecurityGroupsTab(tabs.TableTab):
     name = _("Security Groups")
     slug = "security_groups_tab"
     template_name = "horizon/common/_detail_table.html"
+    permissions = ('openstack.services.compute',)
 
     def get_security_groups_data(self):
         try:
             security_groups = network.security_group_list(self.request)
+        except neutron_exc.ConnectionFailed:
+            security_groups = []
+            exceptions.handle(self.request)
         except Exception:
             security_groups = []
             exceptions.handle(self.request,
@@ -60,6 +63,7 @@ class KeypairsTab(tabs.TableTab):
     name = _("Key Pairs")
     slug = "keypairs_tab"
     template_name = "horizon/common/_detail_table.html"
+    permissions = ('openstack.services.compute',)
 
     def get_keypairs_data(self):
         try:
@@ -76,10 +80,14 @@ class FloatingIPsTab(tabs.TableTab):
     name = _("Floating IPs")
     slug = "floating_ips_tab"
     template_name = "horizon/common/_detail_table.html"
+    permissions = ('openstack.services.compute',)
 
     def get_floating_ips_data(self):
         try:
             floating_ips = network.tenant_floating_ip_list(self.request)
+        except neutron_exc.ConnectionFailed:
+            floating_ips = []
+            exceptions.handle(self.request)
         except Exception:
             floating_ips = []
             exceptions.handle(self.request,
@@ -87,10 +95,13 @@ class FloatingIPsTab(tabs.TableTab):
 
         try:
             floating_ip_pools = network.floating_ip_pools_list(self.request)
+        except neutron_exc.ConnectionFailed:
+            floating_ip_pools = []
+            exceptions.handle(self.request)
         except Exception:
             floating_ip_pools = []
-            messages.warning(self.request,
-                             _('Unable to retrieve floating IP pools.'))
+            exceptions.handle(self.request,
+                              _('Unable to retrieve floating IP pools.'))
         pool_dict = dict([(obj.id, obj.name) for obj in floating_ip_pools])
 
         instances = []
@@ -98,7 +109,7 @@ class FloatingIPsTab(tabs.TableTab):
             instances, has_more = nova.server_list(self.request)
         except Exception:
             exceptions.handle(self.request,
-                        _('Unable to retrieve instance list.'))
+                              _('Unable to retrieve instance list.'))
 
         instances_dict = dict([(obj.id, obj.name) for obj in instances])
 
@@ -107,6 +118,9 @@ class FloatingIPsTab(tabs.TableTab):
             ip.pool_name = pool_dict.get(ip.pool, ip.pool)
 
         return floating_ips
+
+    def allowed(self, request):
+        return network.floating_ip_supported(request)
 
 
 class APIAccessTab(tabs.TableTab):

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -22,18 +20,18 @@
 from django.template.defaultfilters import capfirst  # noqa
 from django.template.defaultfilters import floatformat  # noqa
 from django.utils.translation import ugettext_lazy as _
-from django.views.generic import TemplateView  # noqa
 
 from horizon.utils import csvbase
+from horizon import views
 
 from openstack_dashboard import usage
 
 
 class ProjectUsageCsvRenderer(csvbase.BaseCsvResponse):
 
-    columns = [_("Instance Name"), _("VCPUs"), _("Ram (MB)"),
+    columns = [_("Instance Name"), _("VCPUs"), _("RAM (MB)"),
                _("Disk (GB)"), _("Usage (Hours)"),
-               _("Uptime(Seconds)"), _("State")]
+               _("Time since created (Seconds)"), _("State")]
 
     def get_row_data(self):
 
@@ -58,5 +56,5 @@ class ProjectOverview(usage.UsageView):
         return self.usage.get_instances()
 
 
-class WarningView(TemplateView):
+class WarningView(views.HorizonTemplateView):
     template_name = "project/_warning.html"

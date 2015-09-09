@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -39,12 +37,13 @@ class CreateView(forms.ModalFormView):
     form_class = project_forms.CreateSnapshot
     template_name = 'project/images/snapshots/create.html'
     success_url = reverse_lazy("horizon:project:images:index")
+    page_title = _("Create a Snapshot")
 
     @memoized.memoized_method
     def get_object(self):
         try:
             return api.nova.server_get(self.request,
-                self.kwargs["instance_id"])
+                                       self.kwargs["instance_id"])
         except Exception:
             redirect = reverse('horizon:project:instances:index')
             exceptions.handle(self.request,

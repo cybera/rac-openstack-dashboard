@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -18,8 +16,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.admin.instances import views
 
@@ -27,7 +25,8 @@ from openstack_dashboard.dashboards.admin.instances import views
 INSTANCES = r'^(?P<instance_id>[^/]+)/%s$'
 
 
-urlpatterns = patterns('openstack_dashboard.dashboards.admin.instances.views',
+urlpatterns = patterns(
+    'openstack_dashboard.dashboards.admin.instances.views',
     url(r'^$', views.AdminIndexView.as_view(), name='index'),
     url(INSTANCES % 'update', views.AdminUpdateView.as_view(), name='update'),
     url(INSTANCES % 'detail', views.DetailView.as_view(), name='detail'),

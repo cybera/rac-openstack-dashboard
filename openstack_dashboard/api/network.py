@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 NEC Corporation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -36,7 +34,7 @@ class NetworkClient(object):
             self.floating_ips = nova.FloatingIpManager(request)
 
         if (neutron_enabled and
-                neutron.is_security_group_extension_supported(request)):
+                neutron.is_extension_supported(request, 'security-group')):
             self.secgroups = neutron.SecurityGroupManager(request)
         else:
             self.secgroups = nova.SecurityGroupManager(request)
@@ -67,27 +65,30 @@ def floating_ip_associate(request, floating_ip_id, port_id):
                                                          port_id)
 
 
-def floating_ip_disassociate(request, floating_ip_id, port_id):
-    return NetworkClient(request).floating_ips.disassociate(floating_ip_id,
-                                                            port_id)
+def floating_ip_disassociate(request, floating_ip_id):
+    return NetworkClient(request).floating_ips.disassociate(floating_ip_id)
 
 
 def floating_ip_target_list(request):
     return NetworkClient(request).floating_ips.list_targets()
 
 
-def floating_ip_target_get_by_instance(request, instance_id):
+def floating_ip_target_get_by_instance(request, instance_id, cache=None):
     return NetworkClient(request).floating_ips.get_target_id_by_instance(
-        instance_id)
+        instance_id, cache)
 
 
-def floating_ip_target_list_by_instance(request, instance_id):
+def floating_ip_target_list_by_instance(request, instance_id, cache=None):
     floating_ips = NetworkClient(request).floating_ips
-    return floating_ips.list_target_id_by_instance(instance_id)
+    return floating_ips.list_target_id_by_instance(instance_id, cache)
 
 
 def floating_ip_simple_associate_supported(request):
     return NetworkClient(request).floating_ips.is_simple_associate_supported()
+
+
+def floating_ip_supported(request):
+    return NetworkClient(request).floating_ips.is_supported()
 
 
 def security_group_list(request):
@@ -137,7 +138,7 @@ def security_group_backend(request):
     return NetworkClient(request).secgroups.backend
 
 
-def servers_update_addresses(request, servers):
+def servers_update_addresses(request, servers, all_tenants=False):
     """Retrieve servers networking information from Neutron if enabled.
 
        Should be used when up to date networking information is required,
@@ -146,4 +147,4 @@ def servers_update_addresses(request, servers):
     """
     neutron_enabled = base.is_service_enabled(request, 'network')
     if neutron_enabled:
-        neutron.servers_update_addresses(request, servers)
+        neutron.servers_update_addresses(request, servers, all_tenants)

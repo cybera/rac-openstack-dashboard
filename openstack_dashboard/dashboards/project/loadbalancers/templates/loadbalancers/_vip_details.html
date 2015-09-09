@@ -1,8 +1,8 @@
 {% load i18n sizeformat parse_date %}
 
-<div class="info row-fluid detail">
+<div class="info row detail">
   <hr class="header_rule">
-  <dl>
+  <dl class="dl-horizontal">
     <dt>{% trans "ID" %}</dt>
     <dd>{{ vip.id }}</dd>
 
@@ -15,8 +15,9 @@
     <dt>{% trans "Project ID" %}</dt>
     <dd>{{ vip.tenant_id }}</dd>
 
-    <dt>{% trans "Subnet ID" %}</dt>
-    <dd>{{ vip.subnet_id }}</dd>
+    <dt>{% trans "Subnet" %}</dt>
+    {% url 'horizon:project:networks:subnets:detail' vip.subnet_id as subnet_url %}
+    <dd><a href="{{ subnet_url }}">{{ vip.subnet.name_or_id }} {{ vip.subnet.cidr }}</a></dd>
 
     <dt>{% trans "Address" %}</dt>
     <dd>{{ vip.address }}</dd>
@@ -27,17 +28,24 @@
     <dt>{% trans "Protocol" %}</dt>
     <dd>{{ vip.protocol }}</dd>
 
-    <dt>{% trans "Pool ID" %}</dt>
-    <dd>{{ vip.pool_id }}</dd>
+    <dt>{% trans "Pool" %}</dt>
+    {% url 'horizon:project:loadbalancers:pooldetails' vip.pool_id as pool_url %}
+    <dd><a href="{{ pool_url }}">{{ vip.pool.name_or_id }}</a></dd>
 
     <dt>{% trans "Port ID" %}</dt>
-    <dd>{{ vip.port_id }}</dd>
+    {% url 'horizon:project:networks:ports:detail' vip.port_id as port_url %}
+    <dd><a href="{{ port_url }}">{{ vip.port_id }}</a></dd>
 
     <dt>{% trans "Session Persistence" %}</dt>
     {% if vip.session_persistence %}
-    <dd>{% trans "Type" %}: {{ vip.session_persistence.type }}</dd>
+    <dd>
+      {% blocktrans with persistence_type=vip.session_persistence.type %}Type: {{ persistence_type }}{% endblocktrans %}
+    </dd>
+
     {% if vip.session_persistence.cookie_name %}
-    <dd>{% trans "Cookie Name" %}: {{ vip.session_persistence.cookie_name }}</dd>
+    <dd>
+      {% blocktrans with cookie_name=vip.session_persistence.cookie_name %}Cookie Name: {{ cookie_name }}{% endblocktrans %}
+    </dd>
     {% endif %}
     {% else %}
     <dd>{% trans "None" %}</dd>

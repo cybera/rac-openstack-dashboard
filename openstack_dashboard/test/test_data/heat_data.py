@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -12,6 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from heatclient.v1 import resource_types
+from heatclient.v1 import services
 from heatclient.v1 import stacks
 
 from openstack_dashboard.test.test_data import utils
@@ -91,6 +91,10 @@ TEMPLATE = """
 "RHEL-6.2",
 "RHEL-6.3"
 ]
+},
+"Network": {
+"Type": "String",
+"CustomConstraint": "neutron.network"
 }
 },
 "Mappings": {
@@ -300,6 +304,10 @@ VALIDATE = """
 "m1.large",
 "m1.xlarge"
 ]
+},
+"Network": {
+"Type": "String",
+"CustomConstraint": "neutron.network"
 }
 }
 }
@@ -328,37 +336,128 @@ def data(TEST):
     TEST.stacks = utils.TestDataContainer()
     TEST.stack_templates = utils.TestDataContainer()
     TEST.stack_environments = utils.TestDataContainer()
+    TEST.resource_types = utils.TestDataContainer()
+    TEST.heat_services = utils.TestDataContainer()
 
-    # Stacks
-    stack1 = {
-        "description": "No description",
-        "links": [{
-            "href": "http://192.168.1.70:8004/v1/"
-                    "051c727ee67040d6a7b7812708485a97/"
-                    "stacks/stack-1211-38/"
-                    "05b4f39f-ea96-4d91-910c-e758c078a089",
-            "rel": "self"
-        }],
-        "parameters": {
-            'DBUsername': '******',
-            'InstanceType': 'm1.small',
-            'AWS::StackId':
-        'arn:openstack:heat::2ce287:stacks/teststack/88553ec',
-            'DBRootPassword': '******',
-            'AWS::StackName': 'teststack',
-            'DBPassword': '******',
-            'AWS::Region': 'ap-southeast-1',
-            'DBName': u'wordpress'
-        },
-        "stack_status_reason": "Stack successfully created",
-        "stack_name": "stack-test",
-        "creation_time": "2013-04-22T00:11:39Z",
-        "updated_time": "null",
-        "stack_status": "CREATE_COMPLETE",
-        "id": "05b4f39f-ea96-4d91-910c-e758c078a089"
-    }
-    stack = stacks.Stack(stacks.StackManager(None), stack1)
-    TEST.stacks.add(stack)
+    # Services
+    service_1 = services.Service(services.ServiceManager(None), {
+        "status": "up",
+        "binary": "heat-engine",
+        "report_interval": 60,
+        "engine_id": "2f7b5a9b-c50b-4b01-8248-f89f5fb338d1",
+        "created_at": "2015-02-06T03:23:32.000000",
+        "hostname": "mrkanag",
+        "updated_at": "2015-02-20T09:49:52.000000",
+        "topic": "engine",
+        "host": "engine-1",
+        "deleted_at": None,
+        "id": "1efd7015-5016-4caa-b5c8-12438af7b100"
+    })
+
+    service_2 = services.Service(services.ServiceManager(None), {
+        "status": "up",
+        "binary": "heat-engine",
+        "report_interval": 60,
+        "engine_id": "2f7b5a9b-c50b-4b01-8248-f89f5fb338d2",
+        "created_at": "2015-02-06T03:23:32.000000",
+        "hostname": "mrkanag",
+        "updated_at": "2015-02-20T09:49:52.000000",
+        "topic": "engine",
+        "host": "engine-2",
+        "deleted_at": None,
+        "id": "1efd7015-5016-4caa-b5c8-12438af7b100"
+    })
+
+    TEST.heat_services.add(service_1)
+    TEST.heat_services.add(service_2)
+
+    # Data return by heatclient.
+    TEST.api_resource_types = utils.TestDataContainer()
+
+    for i in range(10):
+        stack_data = {
+            "description": "No description",
+            "links": [{
+                "href": "http://192.168.1.70:8004/v1/"
+                        "051c727ee67040d6a7b7812708485a97/"
+                        "stacks/stack-1211-38/"
+                        "05b4f39f-ea96-4d91-910c-e758c078a089",
+                "rel": "self"
+            }],
+            "parameters": {
+                'DBUsername': '******',
+                'InstanceType': 'm1.small',
+                'AWS::StackId': (
+                    'arn:openstack:heat::2ce287:stacks/teststack/88553ec'),
+                'DBRootPassword': '******',
+                'AWS::StackName': "teststack{0}".format(i),
+                'DBPassword': '******',
+                'AWS::Region': 'ap-southeast-1',
+                'DBName': u'wordpress'
+            },
+            "stack_status_reason": "Stack successfully created",
+            "stack_name": "stack-test{0}".format(i),
+            "creation_time": "2013-04-22T00:11:39Z",
+            "updated_time": "2013-04-22T00:11:39Z",
+            "stack_status": "CREATE_COMPLETE",
+            "id": "05b4f39f-ea96-4d91-910c-e758c078a089{0}".format(i)
+        }
+        stack = stacks.Stack(stacks.StackManager(None), stack_data)
+        TEST.stacks.add(stack)
 
     TEST.stack_templates.add(Template(TEMPLATE, VALIDATE))
     TEST.stack_environments.add(Environment(ENVIRONMENT))
+
+    # Resource types list
+    r_type_1 = {
+        "resource_type": "AWS::CloudFormation::Stack",
+        "attributes": {},
+        "properties": {
+            "Parameters": {
+                "description":
+                    "The set of parameters passed to this nested stack.",
+                "immutable": False,
+                "required": False,
+                "type": "map",
+                "update_allowed": True},
+            "TemplateURL": {
+                "description": "The URL of a template that specifies"
+                               " the stack to be created as a resource.",
+                "immutable": False,
+                "required": True,
+                "type": "string",
+                "update_allowed": True},
+            "TimeoutInMinutes": {
+                "description": "The length of time, in minutes,"
+                               " to wait for the nested stack creation.",
+                "immutable": False,
+                "required": False,
+                "type": "number",
+                "update_allowed": True}
+        }
+    }
+
+    r_type_2 = {
+        "resource_type": "OS::Heat::CloudConfig",
+        "attributes": {
+            "config": {
+                "description": "The config value of the software config."}
+        },
+        "properties": {
+            "cloud_config": {
+                "description": "Map representing the cloud-config data"
+                               " structure which will be formatted as YAML.",
+                "immutable": False,
+                "required": False,
+                "type": "map",
+                "update_allowed": False}
+        }
+    }
+
+    r_types_list = [r_type_1, r_type_2]
+
+    for rt in r_types_list:
+        r_type = resource_types.ResourceType(
+            resource_types.ResourceTypeManager(None), rt['resource_type'])
+        TEST.resource_types.add(r_type)
+        TEST.api_resource_types.add(rt)

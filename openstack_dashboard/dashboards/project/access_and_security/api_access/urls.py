@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -18,14 +16,18 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.project.access_and_security.\
     api_access import views
 
 
-urlpatterns = patterns('',
+urlpatterns = patterns(
+    '',
     url(r'^ec2/$', views.download_ec2_bundle, name='ec2'),
     url(r'^openrc/$', views.download_rc_file, name='openrc'),
+    url(r'^view_credentials/$', views.CredentialsView.as_view(),
+        name='view_credentials'),
+    url(r'^juju/$', views.download_juju_env_file, name='juju'),
 )

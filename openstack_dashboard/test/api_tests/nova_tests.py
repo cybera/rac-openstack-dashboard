@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -26,7 +24,9 @@ from django import http
 from django.test.utils import override_settings
 
 from mox import IsA  # noqa
-from novaclient.v1_1 import servers
+from novaclient import exceptions as nova_exceptions
+from novaclient.v2 import servers
+import six
 
 from openstack_dashboard import api
 from openstack_dashboard.test import helpers as test
@@ -36,7 +36,7 @@ class ServerWrapperTests(test.TestCase):
 
     def test_get_base_attribute(self):
         server = api.nova.Server(self.servers.first(), self.request)
-        self.assertEqual(server.id, self.servers.first().id)
+        self.assertEqual(self.servers.first().id, server.id)
 
     def test_image_name(self):
         image = self.images.first()
@@ -46,7 +46,7 @@ class ServerWrapperTests(test.TestCase):
         self.mox.ReplayAll()
 
         server = api.nova.Server(self.servers.first(), self.request)
-        self.assertEqual(server.image_name, image.name)
+        self.assertEqual(image.name, server.image_name)
 
 
 class ComputeApiTests(test.APITestCase):
@@ -115,12 +115,12 @@ class ComputeApiTests(test.APITestCase):
         novaclient = self.stub_novaclient()
         novaclient.servers = self.mox.CreateMockAnything()
         novaclient.servers.get_rdp_console(server.id,
-                                             console_type).AndReturn(console)
+                                           console_type).AndReturn(console)
         self.mox.ReplayAll()
 
         ret_val = api.nova.server_rdp_console(self.request,
-                                                server.id,
-                                                console_type)
+                                              server.id,
+                                              console_type)
         self.assertIsInstance(ret_val, api.nova.RDPConsole)
 
     def test_server_list(self):
@@ -212,11 +212,10 @@ class ComputeApiTests(test.APITestCase):
         ret_val = api.nova.server_get(self.request, server.id)
         self.assertIsInstance(ret_val, api.nova.Server)
 
-    def test_absolute_limits_handle_unlimited(self):
-        values = {"maxTotalCores": -1, "maxTotalInstances": 10}
+    def _test_absolute_limits(self, values, expected_results):
         limits = self.mox.CreateMockAnything()
         limits.absolute = []
-        for key, val in values.iteritems():
+        for key, val in six.iteritems(values):
             limit = self.mox.CreateMockAnything()
             limit.name = key
             limit.value = val
@@ -228,7 +227,123 @@ class ComputeApiTests(test.APITestCase):
         self.mox.ReplayAll()
 
         ret_val = api.nova.tenant_absolute_limits(self.request, reserved=True)
+        for key in expected_results.keys():
+            self.assertEqual(expected_results[key], ret_val[key])
+
+    def test_absolute_limits_handle_unlimited(self):
+        values = {"maxTotalCores": -1, "maxTotalInstances": 10}
         expected_results = {"maxTotalCores": float("inf"),
                             "maxTotalInstances": 10}
-        for key in expected_results.keys():
-            self.assertEqual(ret_val[key], expected_results[key])
+        self._test_absolute_limits(values, expected_results)
+
+    def test_absolute_limits_negative_used_workaround(self):
+        values = {"maxTotalCores": -1,
+                  "maxTotalInstances": 10,
+                  "totalInstancesUsed": -1,
+                  "totalCoresUsed": -1,
+                  "totalRAMUsed": -2048,
+                  "totalSecurityGroupsUsed": 1,
+                  "totalFloatingIpsUsed": 0,
+                  }
+        expected_results = {"maxTotalCores": float("inf"),
+                            "maxTotalInstances": 10,
+                            "totalInstancesUsed": 0,
+                            "totalCoresUsed": 0,
+                            "totalRAMUsed": 0,
+                            "totalSecurityGroupsUsed": 1,
+                            "totalFloatingIpsUsed": 0,
+                            }
+        self._test_absolute_limits(values, expected_results)
+
+    def test_cold_migrate_host_succeed(self):
+        hypervisor = self.hypervisors.first()
+        novaclient = self.stub_novaclient()
+
+        novaclient.hypervisors = self.mox.CreateMockAnything()
+        novaclient.hypervisors.search('host', True).AndReturn([hypervisor])
+
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.migrate("test_uuid")
+
+        self.mox.ReplayAll()
+
+        ret_val = api.nova.migrate_host(self.request, "host", False, True,
+                                        True)
+
+        self.assertTrue(ret_val)
+
+    def test_cold_migrate_host_fails(self):
+        hypervisor = self.hypervisors.first()
+        novaclient = self.stub_novaclient()
+
+        novaclient.hypervisors = self.mox.CreateMockAnything()
+        novaclient.hypervisors.search('host', True).AndReturn([hypervisor])
+
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.migrate("test_uuid").AndRaise(
+            nova_exceptions.ClientException(404))
+
+        self.mox.ReplayAll()
+
+        self.assertRaises(nova_exceptions.ClientException,
+                          api.nova.migrate_host,
+                          self.request, "host", False, True, True)
+
+    def test_live_migrate_host_with_active_vm(self):
+        hypervisor = self.hypervisors.first()
+        server = self.servers.first()
+        novaclient = self.stub_novaclient()
+        server_uuid = hypervisor.servers[0]["uuid"]
+
+        novaclient.hypervisors = self.mox.CreateMockAnything()
+        novaclient.hypervisors.search('host', True).AndReturn([hypervisor])
+
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.get(server_uuid).AndReturn(server)
+        novaclient.servers.live_migrate(server_uuid, None, True, True)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.nova.migrate_host(self.request, "host", True, True,
+                                        True)
+
+        self.assertTrue(ret_val)
+
+    def test_live_migrate_host_with_paused_vm(self):
+        hypervisor = self.hypervisors.first()
+        server = self.servers.list()[3]
+        novaclient = self.stub_novaclient()
+        server_uuid = hypervisor.servers[0]["uuid"]
+
+        novaclient.hypervisors = self.mox.CreateMockAnything()
+        novaclient.hypervisors.search('host', True).AndReturn([hypervisor])
+
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.get(server_uuid).AndReturn(server)
+        novaclient.servers.live_migrate(server_uuid, None, True, True)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.nova.migrate_host(self.request, "host", True, True,
+                                        True)
+
+        self.assertTrue(ret_val)
+
+    def test_live_migrate_host_without_running_vm(self):
+        hypervisor = self.hypervisors.first()
+        server = self.servers.list()[1]
+        novaclient = self.stub_novaclient()
+        server_uuid = hypervisor.servers[0]["uuid"]
+
+        novaclient.hypervisors = self.mox.CreateMockAnything()
+        novaclient.hypervisors.search('host', True).AndReturn([hypervisor])
+
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.get(server_uuid).AndReturn(server)
+        novaclient.servers.migrate(server_uuid)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.nova.migrate_host(self.request, "host", True, True,
+                                        True)
+        self.assertTrue(ret_val)

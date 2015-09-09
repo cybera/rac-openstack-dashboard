@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012,  Nachi Ueno,  NTT MCL,  Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -17,13 +15,16 @@
 import logging
 
 from django.core.urlresolvers import reverse
+from django.utils.translation import pgettext_lazy
 from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ungettext_lazy
 
 from horizon import exceptions
 from horizon import tables
 from openstack_dashboard import api
 from openstack_dashboard.dashboards.project.networks.ports \
     import tables as project_tables
+from openstack_dashboard import policy
 
 LOG = logging.getLogger(__name__)
 
@@ -37,21 +38,38 @@ def get_device_owner(port):
         return ' '
 
 
-class AddInterface(tables.LinkAction):
+class AddInterface(policy.PolicyTargetMixin, tables.LinkAction):
     name = "create"
     verbose_name = _("Add Interface")
     url = "horizon:project:routers:addinterface"
-    classes = ("ajax-modal", "btn-create")
+    classes = ("ajax-modal",)
+    icon = "plus"
+    policy_rules = (("network", "add_router_interface"),)
 
     def get_link_url(self, datum=None):
         router_id = self.table.kwargs['router_id']
         return reverse(self.url, args=(router_id,))
 
 
-class RemoveInterface(tables.DeleteAction):
-    data_type_singular = _("Interface")
-    data_type_plural = _("Interfaces")
+class RemoveInterface(policy.PolicyTargetMixin, tables.DeleteAction):
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Interface",
+            u"Delete Interfaces",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Interface",
+            u"Deleted Interfaces",
+            count
+        )
+
     failure_url = 'horizon:project:routers:detail'
+    policy_rules = (("network", "remove_router_interface"),)
 
     def delete(self, request, obj_id):
         try:
@@ -71,28 +89,38 @@ class RemoveInterface(tables.DeleteAction):
                                args=[router_id])
             exceptions.handle(request, msg, redirect=redirect)
 
-    def allowed(self, request, datum=None):
-        if datum and datum['device_owner'] == 'network:router_gateway':
-            return False
-        return True
+
+DISPLAY_CHOICES = (
+    ("UP", pgettext_lazy("Admin state of a Port", u"UP")),
+    ("DOWN", pgettext_lazy("Admin state of a Port", u"DOWN")),
+)
+STATUS_DISPLAY_CHOICES = (
+    ("ACTIVE", pgettext_lazy("current status of port", u"Active")),
+    ("BUILD", pgettext_lazy("current status of port", u"Build")),
+    ("DOWN", pgettext_lazy("current status of port", u"Down")),
+    ("ERROR", pgettext_lazy("current status of port", u"Error")),
+)
 
 
 class PortsTable(tables.DataTable):
-    name = tables.Column("name",
+    name = tables.Column("name_or_id",
                          verbose_name=_("Name"),
                          link="horizon:project:networks:ports:detail")
     fixed_ips = tables.Column(project_tables.get_fixed_ips,
                               verbose_name=_("Fixed IPs"))
-    status = tables.Column("status", verbose_name=_("Status"))
+    status = tables.Column("status",
+                           verbose_name=_("Status"),
+                           display_choices=STATUS_DISPLAY_CHOICES)
     device_owner = tables.Column(get_device_owner,
                                  verbose_name=_("Type"))
     admin_state = tables.Column("admin_state",
-                                verbose_name=_("Admin State"))
+                                verbose_name=_("Admin State"),
+                                display_choices=DISPLAY_CHOICES)
 
     def get_object_display(self, port):
         return port.id
 
-    class Meta:
+    class Meta(object):
         name = "interfaces"
         verbose_name = _("Interfaces")
         table_actions = (AddInterface, RemoveInterface)

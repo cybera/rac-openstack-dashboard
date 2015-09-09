@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -11,9 +9,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: Abishek Subramanian, Cisco Systems, Inc.
-# @author: Sergey Sudakovich,   Cisco Systems, Inc.
 
 import logging
 
@@ -31,7 +26,7 @@ LOG = logging.getLogger(__name__)
 
 
 def get_tenant_choices(request):
-    tenant_choices = [('', _("Select a tenant"))]
+    tenant_choices = [('', _("Select a project"))]
     tenants = []
     try:
         tenants, has_more = api.keystone.tenant_list(request)
@@ -49,8 +44,7 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
     """Create Network Profile form."""
 
     name = forms.CharField(max_length=255,
-                           label=_("Name"),
-                           required=True)
+                           label=_("Name"))
     segment_type = forms.ChoiceField(label=_('Segment Type'),
                                      choices=[('vlan', _('VLAN')),
                                               ('overlay', _('Overlay')),
@@ -72,12 +66,13 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
                                              _("Sub Type")}))
     # Sub type options available for Trunk segment type
     sub_type_trunk = forms.ChoiceField(label=_('Sub Type'),
-                                 choices=[('vlan', _('VLAN'))],
-                                 required=False,
-                                 widget=forms.Select
-                                 (attrs={'class': 'switched',
-                                         'data-switch-on': 'segtype',
-                                         'data-segtype-trunk': _("Sub Type")}))
+                                       choices=[('vlan', _('VLAN'))],
+                                       required=False,
+                                       widget=forms.Select
+                                       (attrs={'class': 'switched',
+                                               'data-switch-on': 'segtype',
+                                               'data-segtype-trunk':
+                                                   _("Sub Type")}))
     segment_range = forms.CharField(max_length=255,
                                     label=_("Segment Range"),
                                     required=False,
@@ -89,7 +84,7 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
                                             'data-segtype-overlay':
                                                 _("Segment Range")}),
                                     help_text=_("1-4093 for VLAN; "
-                                                "5000-10000 for Overlay"))
+                                                "5000 and above for Overlay"))
     multicast_ip_range = forms.CharField(max_length=30,
                                          label=_("Multicast IP Range"),
                                          required=False,
@@ -100,8 +95,8 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
                                                  'data-subtype-native_vxlan':
                                                      _("Multicast IP Range")}),
                                          help_text=_("Multicast IPv4 range"
-                                                     "(e.g. 224.0.0.0-"
-                                                     "224.0.0.100)"))
+                                                     "(e.g. 224.0.1.0-"
+                                                     "224.0.1.100)"))
     other_subtype = forms.CharField(max_length=255,
                                     label=_("Sub Type Value (Manual Input)"),
                                     required=False,
@@ -112,7 +107,7 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
                                             'data-subtype-other':
                                                 _("Sub Type Value "
                                                   "(Manual Input)")}),
-                            help_text=_("Enter parameter (e.g. GRE)"))
+                                    help_text=_("Enter parameter (e.g. GRE)"))
     physical_network = forms.CharField(max_length=255,
                                        label=_("Physical Network"),
                                        required=False,
@@ -170,51 +165,47 @@ class CreateNetworkProfile(forms.SelfHandlingForm):
         except Exception:
             redirect = reverse('horizon:router:nexus1000v:index')
             msg = _('Failed to create network profile %s') % data['name']
-            LOG.error(msg)
             exceptions.handle(request, msg, redirect=redirect)
 
 
-class UpdateNetworkProfile(forms.SelfHandlingForm):
-
+class UpdateNetworkProfile(CreateNetworkProfile):
     """Update Network Profile form."""
 
     profile_id = forms.CharField(label=_("ID"),
                                  widget=forms.HiddenInput())
-    name = forms.CharField(max_length=255,
-                           label=_("Name"), required=True)
-    segment_type = forms.ChoiceField(label=_('Segment Type'),
-                                     choices=[('vlan', 'VLAN'),
-                                              ('vxlan', 'VXLAN')],
-                                     widget=forms.Select
-                                     (attrs={'class': 'switchable'}))
-    segment_range = forms.CharField(max_length=255,
-                                    label=_("Segment Range"),
-                                    required=True)
-    physical_network = forms.CharField(max_length=255,
-                                       label=_("Physical Network"),
-                                       required=False)
+
     project = forms.CharField(label=_("Project"), required=False)
+
+    def __init__(self, request, *args, **kwargs):
+        super(UpdateNetworkProfile, self).__init__(request, *args, **kwargs)
+
+        self.fields['segment_type'].widget.attrs['readonly'] = 'readonly'
+        self.fields['sub_type'].widget.attrs['readonly'] = 'readonly'
+        self.fields['sub_type_trunk'].widget.attrs['readonly'] = 'readonly'
+        self.fields['other_subtype'].widget.attrs['readonly'] = 'readonly'
+        self.fields['physical_network'].widget.attrs['readonly'] = 'readonly'
+        self.fields['project'].widget.attrs['readonly'] = 'readonly'
 
     def handle(self, request, data):
         try:
             LOG.debug('request = %(req)s, params = %(params)s',
                       {'req': request, 'params': data})
-            profile = api.neutron.profile_update(request,
-                                                 data['profile_id'],
-                                                 name=data['name'],
-                                                 segment_type=
-                                                 data['segment_type'],
-                                                 segment_range=
-                                                 data['segment_range'],
-                                                 physical_network=
-                                                 data['physical_network'])
+            params = {'name': data['name'],
+                      'segment_range': data['segment_range'],
+                      'multicast_ip_range': data['multicast_ip_range']}
+            profile = api.neutron.profile_update(
+                request,
+                data['profile_id'],
+                **params
+            )
             msg = _('Network Profile %s '
-                    'was successfully updated.') % data['profile_id']
+                    'was successfully updated.') % data['name']
             LOG.debug(msg)
             messages.success(request, msg)
             return profile
         except Exception:
-            LOG.error('Failed to update network profile (%s).',
-                      data['profile_id'])
+            msg = _('Failed to update '
+                    'network profile (%s).') % data['name']
             redirect = reverse('horizon:router:nexus1000v:index')
             exceptions.handle(request, msg, redirect=redirect)
+            return False

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Centrin Data Systems Ltd.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,9 +12,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.core.urlresolvers import NoReverseMatch  # noqa
+import django
+from django.conf import settings
 from django.core.urlresolvers import reverse
 from django import http
+from django.utils.six.moves.urllib.parse import urlsplit  # noqa
 from django.utils import unittest
 
 from mox import IsA  # noqa
@@ -54,10 +54,11 @@ class ChangePasswordTests(test.TestCase):
 
         self.assertFormError(res, "form", None, ['Passwords do not match.'])
 
-    # TODO(jpichon): Temporarily disabled, see bug #1333144
-    @unittest.skip("Temporarily disabled, see bug #1333144")
+    @unittest.skipUnless(django.VERSION[0] >= 1 and django.VERSION[1] >= 6,
+                         "'HttpResponseRedirect' object has no attribute "
+                         "'url' prior to Django 1.6")
     @test.create_stubs({api.keystone: ('user_update_own_password', )})
-    def test_change_password_shows_message_on_login_page(self):
+    def test_change_password_sets_logout_reason(self):
         api.keystone.user_update_own_password(IsA(http.HttpRequest),
                                               'oldpwd',
                                               'normalpwd').AndReturn(None)
@@ -67,7 +68,12 @@ class ChangePasswordTests(test.TestCase):
                     'current_password': 'oldpwd',
                     'new_password': 'normalpwd',
                     'confirm_password': 'normalpwd'}
-        res = self.client.post(INDEX_URL, formData, follow=True)
+        res = self.client.post(INDEX_URL, formData, follow=False)
 
-        info_msg = "Password changed. Please log in again to continue."
-        self.assertContains(res, info_msg)
+        self.assertRedirectsNoFollow(res, settings.LOGOUT_URL)
+        self.assertIn('logout_reason', res.cookies)
+        self.assertEqual(res.cookies['logout_reason'].value,
+                         "Password changed. Please log in again to continue.")
+        scheme, netloc, path, query, fragment = urlsplit(res.url)
+        redirect_response = res.client.get(path, http.QueryDict(query))
+        self.assertRedirectsNoFollow(redirect_response, settings.LOGIN_URL)

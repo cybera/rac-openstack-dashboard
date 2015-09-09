@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013, Mirantis Inc
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,8 +11,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: Tatiana Mazur
 
 import logging
 
@@ -24,7 +20,6 @@ from django.utils.translation import ugettext_lazy as _
 from horizon import exceptions
 from horizon import forms
 from horizon import messages
-from horizon.utils import fields
 
 from openstack_dashboard import api
 
@@ -39,11 +34,14 @@ class UpdateVPNService(forms.SelfHandlingForm):
         widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     description = forms.CharField(
         required=False, max_length=80, label=_("Description"))
-    admin_state_up = forms.BooleanField(label=_("Admin State"), required=False)
+    admin_state_up = forms.ChoiceField(choices=[(True, _('UP')),
+                                                (False, _('DOWN'))],
+                                       label=_("Admin State"))
 
     failure_url = 'horizon:project:vpn:index'
 
     def handle(self, request, context):
+        context['admin_state_up'] = (context['admin_state_up'] == 'True')
         try:
             data = {'vpnservice': {'name': context['name'],
                                    'description': context['description'],
@@ -93,7 +91,7 @@ class UpdateIKEPolicy(forms.SelfHandlingForm):
     lifetime_value = forms.IntegerField(
         min_value=60,
         label=_("Lifetime value for IKE keys"),
-        help_text=_("Equal to or more than 60"))
+        help_text=_("Equal to or greater than 60"))
     pfs = forms.ChoiceField(
         label=_("Perfect Forward Secrecy"),
         choices=[('group2', _('group2')),
@@ -110,16 +108,17 @@ class UpdateIKEPolicy(forms.SelfHandlingForm):
     def handle(self, request, context):
         try:
             data = {'ikepolicy':
-                {'name': context['name'],
-                 'description': context['description'],
-                 'auth_algorithm': context['auth_algorithm'],
-                 'encryption_algorithm': context['encryption_algorithm'],
-                 'ike_version': context['ike_version'],
-                 'lifetime': {'units': context['lifetime_units'],
-                              'value': context['lifetime_value']},
-                 'pfs': context['pfs'],
-                 'phase1_negotiation_mode': context['phase1_negotiation_mode'],
-                 }}
+                    {'name': context['name'],
+                     'description': context['description'],
+                     'auth_algorithm': context['auth_algorithm'],
+                     'encryption_algorithm': context['encryption_algorithm'],
+                     'ike_version': context['ike_version'],
+                     'lifetime': {'units': context['lifetime_units'],
+                                  'value': context['lifetime_value']},
+                     'pfs': context['pfs'],
+                     'phase1_negotiation_mode':
+                     context['phase1_negotiation_mode'],
+                     }}
             ikepolicy = api.vpn.ikepolicy_update(
                 request, context['ikepolicy_id'], **data)
             msg = (_('IKE Policy %s was successfully updated.')
@@ -164,7 +163,7 @@ class UpdateIPSecPolicy(forms.SelfHandlingForm):
     lifetime_value = forms.IntegerField(
         min_value=60,
         label=_("Lifetime value"),
-        help_text=_("Equal to or more than 60"))
+        help_text=_("Equal to or greater than 60"))
     pfs = forms.ChoiceField(
         label=_("Perfect Forward Secrecy"),
         choices=[('group2', _('group2')),
@@ -181,16 +180,16 @@ class UpdateIPSecPolicy(forms.SelfHandlingForm):
     def handle(self, request, context):
         try:
             data = {'ipsecpolicy':
-                {'name': context['name'],
-                 'description': context['description'],
-                 'auth_algorithm': context['auth_algorithm'],
-                 'encapsulation_mode': context['encapsulation_mode'],
-                 'encryption_algorithm': context['encryption_algorithm'],
-                 'lifetime': {'units': context['lifetime_units'],
-                              'value': context['lifetime_value']},
-                 'pfs': context['pfs'],
-                 'transform_protocol': context['transform_protocol'],
-                 }}
+                    {'name': context['name'],
+                     'description': context['description'],
+                     'auth_algorithm': context['auth_algorithm'],
+                     'encapsulation_mode': context['encapsulation_mode'],
+                     'encryption_algorithm': context['encryption_algorithm'],
+                     'lifetime': {'units': context['lifetime_units'],
+                                  'value': context['lifetime_value']},
+                     'pfs': context['pfs'],
+                     'transform_protocol': context['transform_protocol'],
+                     }}
             ipsecpolicy = api.vpn.ipsecpolicy_update(
                 request, context['ipsecpolicy_id'], **data)
             msg = (_('IPSec Policy %s was successfully updated.')
@@ -207,37 +206,39 @@ class UpdateIPSecPolicy(forms.SelfHandlingForm):
 
 class UpdateIPSecSiteConnection(forms.SelfHandlingForm):
     name = forms.CharField(max_length=80, label=_("Name"), required=False)
-    ipsecsiteconnection_id = forms.CharField(label=_("ID"),
+    ipsecsiteconnection_id = forms.CharField(
+        label=_("ID"),
         widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     description = forms.CharField(
         required=False, max_length=80, label=_("Description"))
-    peer_address = fields.IPField(
+    peer_address = forms.IPField(
         label=_("Peer gateway public IPv4/IPv6 Address or FQDN"),
         help_text=_("Peer gateway public IPv4/IPv6 address or FQDN for "
                     "the VPN Connection"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=False)
-    peer_id = fields.IPField(
+    peer_id = forms.IPField(
         label=_("Peer router identity for authentication (Peer ID)"),
         help_text=_("Peer router identity for authentication. "
                     "Can be IPv4/IPv6 address, e-mail, key ID, or FQDN"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=False)
-    peer_cidrs = fields.MultiIPField(
+    peer_cidrs = forms.MultiIPField(
         label=_("Remote peer subnet(s)"),
         help_text=_("Remote peer subnet(s) address(es) "
                     "with mask(s) in CIDR format "
                     "separated with commas if needed "
                     "(e.g. 20.1.0.0/24, 21.1.0.0/24)"),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=True)
     psk = forms.CharField(
         max_length=80, label=_("Pre-Shared Key (PSK) string"))
     mtu = forms.IntegerField(
         min_value=68,
         label=_("Maximum Transmission Unit size for the connection"),
-        help_text=_("Equal to or more than 68 if the local subnet is IPv4. "
-                    "Equal to or more than 1280 if the local subnet is IPv6."))
+        help_text=_("Equal to or greater than 68 if the local subnet is IPv4. "
+                    "Equal to or greater than 1280 if the local subnet "
+                    "is IPv6."))
     dpd_action = forms.ChoiceField(
         label=_("Dead peer detection actions"),
         choices=[('hold', _('hold')),
@@ -257,27 +258,30 @@ class UpdateIPSecSiteConnection(forms.SelfHandlingForm):
         label=_("Initiator state"),
         choices=[('bi-directional', _('bi-directional')),
                  ('response-only', _('response-only'))])
-    admin_state_up = forms.BooleanField(label=_("Admin State"), required=False)
+    admin_state_up = forms.ChoiceField(choices=[(True, _('UP')),
+                                                (False, _('DOWN'))],
+                                       label=_("Admin State"))
 
     failure_url = 'horizon:project:vpn:index'
 
     def handle(self, request, context):
+        context['admin_state_up'] = (context['admin_state_up'] == 'True')
         try:
             data = {'ipsec_site_connection':
-                {'name': context['name'],
-                 'description': context['description'],
-                 'peer_address': context['peer_address'],
-                 'peer_id': context['peer_id'],
-                 'peer_cidrs': context[
-                     'peer_cidrs'].replace(" ", "").split(","),
-                 'psk': context['psk'],
-                 'mtu': context['mtu'],
-                 'dpd': {'action': context['dpd_action'],
-                         'interval': context['dpd_interval'],
-                         'timeout': context['dpd_timeout']},
-                 'initiator': context['initiator'],
-                 'admin_state_up': context['admin_state_up'],
-                 }}
+                    {'name': context['name'],
+                     'description': context['description'],
+                     'peer_address': context['peer_address'],
+                     'peer_id': context['peer_id'],
+                     'peer_cidrs': context[
+                         'peer_cidrs'].replace(" ", "").split(","),
+                     'psk': context['psk'],
+                     'mtu': context['mtu'],
+                     'dpd': {'action': context['dpd_action'],
+                             'interval': context['dpd_interval'],
+                             'timeout': context['dpd_timeout']},
+                     'initiator': context['initiator'],
+                     'admin_state_up': context['admin_state_up'],
+                     }}
             ipsecsiteconnection = api.vpn.ipsecsiteconnection_update(
                 request, context['ipsecsiteconnection_id'], **data)
             msg = (_('IPSec Site Connection %s was successfully updated.')

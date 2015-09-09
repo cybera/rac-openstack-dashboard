@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 NEC Corporation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -23,7 +21,10 @@ methods defined in this module.
 
 import abc
 
+import six
 
+
+@six.add_metaclass(abc.ABCMeta)
 class FloatingIpManager(object):
     """Abstract class to implement Floating IP methods
 
@@ -38,8 +39,6 @@ class FloatingIpManager(object):
                 (instance_id when Nova floating IP is used)
     * instance_id: Instance ID of an associated with the Floating IP
     """
-
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def list_pools(self):
@@ -91,12 +90,8 @@ class FloatingIpManager(object):
         pass
 
     @abc.abstractmethod
-    def disassociate(self, floating_ip_id, port_id):
-        """Disassociates the floating IP from the port.
-
-        port_id is a fixed IP of a instance (Nova) or
-        a port_id attached to a VNIC of a instance.
-        """
+    def disassociate(self, floating_ip_id):
+        """Disassociates the floating IP specified."""
         pass
 
     @abc.abstractmethod
@@ -112,16 +107,30 @@ class FloatingIpManager(object):
         pass
 
     @abc.abstractmethod
-    def get_target_id_by_instance(self, instance_id):
-        """Returns a target ID of floating IP association based on
-        a backend implementation.
+    def get_target_id_by_instance(self, instance_id, target_list=None):
+        """Returns a target ID of floating IP association.
+
+        Based on a backend implementation.
+
+        :param instance_id: ID of target VM instance
+        :param target_list: (optional) a list returned by list_targets().
+            If specified, looking up is done against the specified list
+            to save extra API calls to a back-end. Otherwise a target
+            information is retrieved from a back-end inside the method.
         """
         pass
 
     @abc.abstractmethod
-    def list_target_id_by_instance(self, instance_id):
-        """Returns a list of instance's target IDs of floating IP association
-        based on the backend implementation
+    def list_target_id_by_instance(self, instance_id, target_list=None):
+        """Returns a list of instance's target IDs of floating IP association.
+
+        Based on the backend implementation
+
+        :param instance_id: ID of target VM instance
+        :param target_list: (optional) a list returned by list_targets().
+            If specified, looking up is done against the specified list
+            to save extra API calls to a back-end. Otherwise target list
+            is retrieved from a back-end inside the method.
         """
         pass
 
@@ -130,7 +139,13 @@ class FloatingIpManager(object):
         """Returns True if the default floating IP pool is enabled."""
         pass
 
+    @abc.abstractmethod
+    def is_supported(self):
+        """Returns True if floating IP feature is supported."""
+        pass
 
+
+@six.add_metaclass(abc.ABCMeta)
 class SecurityGroupManager(object):
     """Abstract class to implement Security Group methods
 
@@ -160,8 +175,6 @@ class SecurityGroupManager(object):
     "{'name': <secgroup_name>}"
 
     """
-
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def list(self):

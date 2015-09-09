@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 #    Copyright 2013, Big Switch Networks, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -40,8 +38,6 @@ class PoolsTab(tabs.TableTab):
             pools = []
             exceptions.handle(self.tab_group.request,
                               _('Unable to retrieve pools list.'))
-        for p in pools:
-            p.set_id_as_name_if_empty()
         return pools
 
 
@@ -60,8 +56,6 @@ class MembersTab(tabs.TableTab):
             members = []
             exceptions.handle(self.tab_group.request,
                               _('Unable to retrieve member list.'))
-        for m in members:
-            m.set_id_as_name_if_empty()
         return members
 
 
@@ -95,13 +89,7 @@ class PoolDetailsTab(tabs.Tab):
     template_name = "project/loadbalancers/_pool_details.html"
 
     def get_context_data(self, request):
-        pid = self.tab_group.kwargs['pool_id']
-        try:
-            pool = api.lbaas.pool_get(request, pid)
-        except Exception:
-            pool = []
-            exceptions.handle(request,
-                              _('Unable to retrieve pool details.'))
+        pool = self.tab_group.kwargs['pool']
         return {'pool': pool}
 
 
@@ -127,13 +115,7 @@ class MemberDetailsTab(tabs.Tab):
     template_name = "project/loadbalancers/_member_details.html"
 
     def get_context_data(self, request):
-        mid = self.tab_group.kwargs['member_id']
-        try:
-            member = api.lbaas.member_get(request, mid)
-        except Exception:
-            member = []
-            exceptions.handle(self.tab_group.request,
-                              _('Unable to retrieve member details.'))
+        member = self.tab_group.kwargs['member']
         return {'member': member}
 
 
@@ -143,13 +125,7 @@ class MonitorDetailsTab(tabs.Tab):
     template_name = "project/loadbalancers/_monitor_details.html"
 
     def get_context_data(self, request):
-        mid = self.tab_group.kwargs['monitor_id']
-        try:
-            monitor = api.lbaas.pool_health_monitor_get(request, mid)
-        except Exception:
-            monitor = []
-            exceptions.handle(self.tab_group.request,
-                              _('Unable to retrieve monitor details.'))
+        monitor = self.tab_group.kwargs['monitor']
         return {'monitor': monitor}
 
 

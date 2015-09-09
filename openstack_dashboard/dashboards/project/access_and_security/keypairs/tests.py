@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -36,11 +34,15 @@ class KeyPairViewTests(test.TestCase):
     def test_delete_keypair(self):
         keypair = self.keypairs.first()
 
+        self.mox.StubOutWithMock(api.network, 'floating_ip_supported')
         self.mox.StubOutWithMock(api.nova, 'keypair_list')
         self.mox.StubOutWithMock(api.nova, 'keypair_delete')
 
+        # floating_ip_supported is called in Floating IP tab allowed().
+        api.network.floating_ip_supported(IsA(http.HttpRequest)) \
+            .AndReturn(True)
         api.nova.keypair_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.keypairs.list())
+            .AndReturn(self.keypairs.list())
         api.nova.keypair_delete(IsA(http.HttpRequest), keypair.name)
         self.mox.ReplayAll()
 
@@ -50,13 +52,17 @@ class KeyPairViewTests(test.TestCase):
 
     def test_delete_keypair_exception(self):
         keypair = self.keypairs.first()
+        self.mox.StubOutWithMock(api.network, 'floating_ip_supported')
         self.mox.StubOutWithMock(api.nova, 'keypair_list')
         self.mox.StubOutWithMock(api.nova, 'keypair_delete')
 
+        # floating_ip_supported is called in Floating IP tab allowed().
+        api.network.floating_ip_supported(IsA(http.HttpRequest)) \
+            .AndReturn(True)
         api.nova.keypair_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.keypairs.list())
+            .AndReturn(self.keypairs.list())
         api.nova.keypair_delete(IsA(http.HttpRequest), keypair.name) \
-                .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
         self.mox.ReplayAll()
 
         formData = {'action': 'keypairs__delete__%s' % keypair.name}
@@ -66,8 +72,8 @@ class KeyPairViewTests(test.TestCase):
     def test_create_keypair_get(self):
         res = self.client.get(
             reverse('horizon:project:access_and_security:keypairs:create'))
-        self.assertTemplateUsed(res,
-                        'project/access_and_security/keypairs/create.html')
+        self.assertTemplateUsed(
+            res, 'project/access_and_security/keypairs/create.html')
 
     def test_download_keypair_get(self):
         keypair_name = "keypair"
@@ -94,6 +100,39 @@ class KeyPairViewTests(test.TestCase):
 
         self.assertTrue(res.has_header('content-disposition'))
 
+    def test_keypair_detail_get(self):
+        keypair = self.keypairs.first()
+        keypair.private_key = "secrete"
+
+        self.mox.StubOutWithMock(api.nova, 'keypair_get')
+        api.nova.keypair_get(IsA(http.HttpRequest),
+                             keypair.name).AndReturn(keypair)
+        self.mox.ReplayAll()
+
+        context = {'keypair_name': keypair.name}
+        url = reverse('horizon:project:access_and_security:keypairs:detail',
+                      kwargs={'keypair_name': keypair.name})
+        res = self.client.get(url, context)
+
+        self.assertContains(res, "<h1>Key Pair Details</h1>", 1, 200)
+        self.assertContains(res, "<dd>%s</dd>" % keypair.name, 2, 200)
+
+    @test.create_stubs({api.nova: ("keypair_create", "keypair_delete")})
+    def test_regenerate_keypair_get(self):
+        keypair = self.keypairs.first()
+        keypair.private_key = "secret"
+        optional_param = "regenerate"
+        api.nova.keypair_delete(IsA(http.HttpRequest), keypair.name)
+        api.nova.keypair_create(IsA(http.HttpRequest),
+                                keypair.name).AndReturn(keypair)
+        self.mox.ReplayAll()
+        url = reverse('horizon:project:access_and_security:keypairs:generate',
+                      kwargs={'keypair_name': keypair.name,
+                              'optional': optional_param})
+        res = self.client.get(url)
+
+        self.assertTrue(res.has_header('content-disposition'))
+
     @test.create_stubs({api.nova: ("keypair_import",)})
     def test_import_keypair(self):
         key1_name = "new_key_pair"
@@ -111,13 +150,13 @@ class KeyPairViewTests(test.TestCase):
         res = self.client.post(url, formData)
         self.assertMessageCount(res, success=1)
 
+    @test.create_stubs({api.nova: ("keypair_import",)})
     def test_import_keypair_invalid_key(self):
         key_name = "new_key_pair"
         public_key = "ABCDEF"
 
-        self.mox.StubOutWithMock(api.nova, 'keypair_import')
         api.nova.keypair_import(IsA(http.HttpRequest), key_name, public_key) \
-                        .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
         self.mox.ReplayAll()
 
         formData = {'method': 'ImportKeypair',
@@ -130,7 +169,7 @@ class KeyPairViewTests(test.TestCase):
         self.assertFormErrors(res, count=1, message=msg)
 
     def test_import_keypair_invalid_key_name(self):
-        key_name = "new key pair"
+        key_name = "invalid#key?name=!"
         public_key = "ABCDEF"
 
         formData = {'method': 'ImportKeypair',
@@ -142,12 +181,12 @@ class KeyPairViewTests(test.TestCase):
         msg = unicode(KEYPAIR_ERROR_MESSAGES['invalid'])
         self.assertFormErrors(res, count=1, message=msg)
 
+    @test.create_stubs({api.nova: ("keypair_create",)})
     def test_generate_keypair_exception(self):
         keypair = self.keypairs.first()
 
-        self.mox.StubOutWithMock(api.nova, 'keypair_create')
         api.nova.keypair_create(IsA(http.HttpRequest), keypair.name) \
-                        .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
         self.mox.ReplayAll()
 
         context = {'keypair_name': keypair.name}
@@ -157,3 +196,46 @@ class KeyPairViewTests(test.TestCase):
 
         self.assertRedirectsNoFollow(
             res, reverse('horizon:project:access_and_security:index'))
+
+    @test.create_stubs({api.nova: ("keypair_import",)})
+    def test_import_keypair_with_regex_defined_name(self):
+        key1_name = "new-key-pair with_regex"
+        public_key = "ssh-rsa ABCDEFGHIJKLMNOPQR\r\n" \
+                     "STUVWXYZ1234567890\r" \
+                     "XXYYZZ user@computer\n\n"
+        api.nova.keypair_import(IsA(http.HttpRequest), key1_name,
+                                public_key.replace("\r", "").replace("\n", ""))
+        self.mox.ReplayAll()
+
+        formData = {'method': 'ImportKeypair',
+                    'name': key1_name,
+                    'public_key': public_key}
+        url = reverse('horizon:project:access_and_security:keypairs:import')
+        res = self.client.post(url, formData)
+        self.assertMessageCount(res, success=1)
+
+    @test.create_stubs({api.nova: ("keypair_create",)})
+    def test_create_keypair_with_regex_name_get(self):
+        keypair = self.keypairs.first()
+        keypair.name = "key-space pair-regex_name-0123456789"
+        keypair.private_key = "secret"
+
+        api.nova.keypair_create(IsA(http.HttpRequest),
+                                keypair.name).AndReturn(keypair)
+        self.mox.ReplayAll()
+
+        context = {'keypair_name': keypair.name}
+        url = reverse('horizon:project:access_and_security:keypairs:generate',
+                      kwargs={'keypair_name': keypair.name})
+        res = self.client.get(url, context)
+
+        self.assertTrue(res.has_header('content-disposition'))
+
+    def test_download_with_regex_name_get(self):
+        keypair_name = "key pair-regex_name-0123456789"
+        context = {'keypair_name': keypair_name}
+        url = reverse('horizon:project:access_and_security:keypairs:download',
+                      kwargs={'keypair_name': keypair_name})
+        res = self.client.get(url, context)
+        self.assertTemplateUsed(
+            res, 'project/access_and_security/keypairs/download.html')

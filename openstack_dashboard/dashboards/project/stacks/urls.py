@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -12,8 +10,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.project.stacks import views
 
@@ -24,6 +22,11 @@ urlpatterns = patterns(
         views.SelectTemplateView.as_view(),
         name='select_template'),
     url(r'^launch$', views.CreateStackView.as_view(), name='launch'),
+    url(r'^preview_template$',
+        views.PreviewTemplateView.as_view(), name='preview_template'),
+    url(r'^preview$', views.PreviewStackView.as_view(), name='preview'),
+    url(r'^preview_details$',
+        views.PreviewStackDetailsView.as_view(), name='preview_details'),
     url(r'^stack/(?P<stack_id>[^/]+)/$',
         views.DetailView.as_view(), name='detail'),
     url(r'^(?P<stack_id>[^/]+)/change_template$',

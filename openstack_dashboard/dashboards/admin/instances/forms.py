@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Kylin OS, Inc
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -31,7 +29,6 @@ class LiveMigrateForm(forms.SelfHandlingForm):
                                    widget=forms.TextInput(
                                        attrs={'readonly': 'readonly'}))
     host = forms.ChoiceField(label=_("New Host"),
-                             required=True,
                              help_text=_("Choose a Host to migrate to."))
     disk_over_commit = forms.BooleanField(label=_("Disk Over Commit"),
                                           initial=False, required=False)
@@ -50,10 +47,11 @@ class LiveMigrateForm(forms.SelfHandlingForm):
     def populate_host_choices(self, request, initial):
         hosts = initial.get('hosts')
         current_host = initial.get('current_host')
-        host_list = [(host.hypervisor_hostname,
-                      host.hypervisor_hostname)
+        host_list = [(host.host_name,
+                      host.host_name)
                      for host in hosts
-                     if host.service['host'] != current_host]
+                     if (host.service.startswith('compute') and
+                         host.host_name != current_host)]
         if host_list:
             host_list.insert(0, ("", _("Select a new host")))
         else:

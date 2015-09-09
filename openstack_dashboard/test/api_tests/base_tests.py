@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -20,9 +18,14 @@
 
 from __future__ import absolute_import
 
+from django.conf import settings
+
 from horizon import exceptions
 
 from openstack_dashboard.api import base as api_base
+from openstack_dashboard.api import cinder
+from openstack_dashboard.api import glance
+from openstack_dashboard.api import keystone
 from openstack_dashboard.test import helpers as test
 
 
@@ -59,12 +62,13 @@ class APIDict(api_base.APIDictWrapper):
 class APIResourceWrapperTests(test.TestCase):
     def test_get_attribute(self):
         resource = APIResource.get_instance()
-        self.assertEqual(resource.foo, 'foo')
+        self.assertEqual('foo', resource.foo)
 
     def test_get_invalid_attribute(self):
         resource = APIResource.get_instance()
-        self.assertNotIn('missing', resource._attrs,
-                msg="Test assumption broken.  Find new missing attribute")
+        self.assertNotIn(
+            'missing', resource._attrs,
+            msg="Test assumption broken.  Find new missing attribute")
         with self.assertRaises(AttributeError):
             resource.missing
 
@@ -86,13 +90,14 @@ class APIDictWrapperTests(test.TestCase):
     # style access.  Test both
     def test_get_item(self):
         resource = APIDict.get_instance()
-        self.assertEqual(resource.foo, 'foo')
-        self.assertEqual(resource['foo'], 'foo')
+        self.assertEqual('foo', resource.foo)
+        self.assertEqual('foo', resource['foo'])
 
     def test_get_invalid_item(self):
         resource = APIDict.get_instance()
-        self.assertNotIn('missing', resource._attrs,
-                msg="Test assumption broken.  Find new missing attribute")
+        self.assertNotIn(
+            'missing', resource._attrs,
+            msg="Test assumption broken.  Find new missing attribute")
         with self.assertRaises(AttributeError):
             resource.missing
         with self.assertRaises(KeyError):
@@ -108,11 +113,76 @@ class APIDictWrapperTests(test.TestCase):
     def test_get_with_default(self):
         resource = APIDict.get_instance()
 
-        self.assertEqual(resource.get('foo'), 'foo')
+        self.assertEqual('foo', resource.get('foo'))
 
         self.assertIsNone(resource.get('baz'))
 
         self.assertEqual('retValue', resource.get('baz', 'retValue'))
+
+    def test_get_with_non_str(self):
+        resource = APIDict.get_instance()
+        self.assertNotIn(0, resource._attrs,
+                         msg="Test assumption broken.  "
+                             "Find new missing attribute.")
+        self.assertIsNone(resource.get(0))
+        self.assertEqual('retValue', resource.get(0, 'retValue'))
+
+    def test_get_item_non_str(self):
+        resource = APIDict.get_instance()
+        self.assertNotIn(0, resource._attrs,
+                         msg="Test assumption broken.  "
+                             "Find new missing attribute.")
+        with self.assertRaises(KeyError):
+            resource[0]
+
+    def test_in_not_there_str(self):
+        resource = APIDict.get_instance()
+        self.assertNotIn('missing', resource._attrs,
+                         msg="Test assumption broken.  "
+                             "Find new missing attribute.")
+        # We're primarily interested in this test NOT raising a TypeError.
+        self.assertFalse('missing' in resource)
+
+    def test_in_not_there_non_str(self):
+        resource = APIDict.get_instance()
+        self.assertNotIn(0, resource._attrs,
+                         msg="Test assumption broken.  "
+                             "Find new missing attribute.")
+        # We're primarily interested in this test NOT raising a TypeError.
+        self.assertFalse(0 in resource)
+
+
+class ApiVersionTests(test.TestCase):
+    def setUp(self):
+        super(ApiVersionTests, self).setUp()
+        self.previous_settings = settings.OPENSTACK_API_VERSIONS
+        settings.OPENSTACK_API_VERSIONS = {
+            "data-processing": 1.1,
+            "identity": "2.0",
+            "volume": 1
+        }
+        # Make sure cached data from other tests doesn't interfere
+        cinder.VERSIONS.clear_active_cache()
+        keystone.VERSIONS.clear_active_cache()
+        glance.VERSIONS.clear_active_cache()
+
+    def tearDown(self):
+        super(ApiVersionTests, self).tearDown()
+        settings.OPENSTACK_API_VERSIONS = self.previous_settings
+        # Clear out our bogus data so it doesn't interfere
+        cinder.VERSIONS.clear_active_cache()
+        keystone.VERSIONS.clear_active_cache()
+        glance.VERSIONS.clear_active_cache()
+
+    def test_invalid_versions(self):
+        with self.assertRaises(exceptions.ConfigurationError):
+            getattr(keystone.VERSIONS, 'active')
+        with self.assertRaises(exceptions.ConfigurationError):
+            getattr(cinder.VERSIONS, 'active')
+        try:
+            getattr(glance.VERSIONS, 'active')
+        except exceptions.ConfigurationError:
+            self.fail("ConfigurationError raised inappropriately.")
 
 
 class ApiHelperTests(test.TestCase):
@@ -120,28 +190,28 @@ class ApiHelperTests(test.TestCase):
 
     def test_url_for(self):
         url = api_base.url_for(self.request, 'image')
-        self.assertEqual(url, 'http://public.glance.example.com:9292/v1')
+        self.assertEqual('http://public.glance.example.com:9292/v1', url)
 
         url = api_base.url_for(self.request, 'image', endpoint_type='adminURL')
-        self.assertEqual(url, 'http://admin.glance.example.com:9292/v1')
+        self.assertEqual('http://admin.glance.example.com:9292/v1', url)
 
         url = api_base.url_for(self.request, 'compute')
-        self.assertEqual(url, 'http://public.nova.example.com:8774/v2')
+        self.assertEqual('http://public.nova.example.com:8774/v2', url)
 
         url = api_base.url_for(self.request, 'compute',
                                endpoint_type='adminURL')
-        self.assertEqual(url, 'http://admin.nova.example.com:8774/v2')
+        self.assertEqual('http://admin.nova.example.com:8774/v2', url)
 
         url = api_base.url_for(self.request, 'volume')
-        self.assertEqual(url, 'http://public.nova.example.com:8776/v1')
+        self.assertEqual('http://public.nova.example.com:8776/v1', url)
 
         url = api_base.url_for(self.request, 'volume',
                                endpoint_type="internalURL")
-        self.assertEqual(url, 'http://int.nova.example.com:8776/v1')
+        self.assertEqual('http://int.nova.example.com:8776/v1', url)
 
         url = api_base.url_for(self.request, 'volume',
                                endpoint_type='adminURL')
-        self.assertEqual(url, 'http://admin.nova.example.com:8776/v1')
+        self.assertEqual('http://admin.nova.example.com:8776/v1', url)
 
         self.assertNotIn('notAnApi', self.request.user.service_catalog,
                          'Select a new nonexistent service catalog key')
@@ -150,12 +220,12 @@ class ApiHelperTests(test.TestCase):
 
         self.request.user.services_region = "RegionTwo"
         url = api_base.url_for(self.request, 'compute')
-        self.assertEqual(url, 'http://public.nova2.example.com:8774/v2')
+        self.assertEqual('http://public.nova2.example.com:8774/v2', url)
 
         self.request.user.services_region = "RegionTwo"
         url = api_base.url_for(self.request, 'compute',
                                endpoint_type='adminURL')
-        self.assertEqual(url, 'http://admin.nova2.example.com:8774/v2')
+        self.assertEqual('http://admin.nova2.example.com:8774/v2', url)
 
         self.request.user.services_region = "RegionTwo"
         with self.assertRaises(exceptions.ServiceCatalogException):
@@ -164,7 +234,7 @@ class ApiHelperTests(test.TestCase):
         self.request.user.services_region = "bogus_value"
         url = api_base.url_for(self.request, 'identity',
                                endpoint_type='adminURL')
-        self.assertEqual(url, 'http://admin.keystone.example.com:35357/v2.0')
+        self.assertEqual('http://admin.keystone.example.com:35357/v2.0', url)
 
         self.request.user.services_region = "bogus_value"
         with self.assertRaises(exceptions.ServiceCatalogException):
@@ -180,11 +250,11 @@ class QuotaSetTests(test.TestCase):
         other_quota_set = api_base.QuotaSet(other_quota_dict)
 
         quota_set += other_quota_set
-        self.assertEqual(len(quota_set), 3)
+        self.assertEqual(3, len(quota_set))
 
         quota_dict.update(other_quota_dict)
         for q in quota_set:
-            self.assertEqual(q.limit, quota_dict[q.name])
+            self.assertEqual(quota_dict[q.name], q.limit)
 
     def test_quotaset_add_doesnt_override_existing_quota(self):
         quota_dict = {'foo': 1, 'bar': 10}
@@ -192,10 +262,10 @@ class QuotaSetTests(test.TestCase):
         other_quota_set = api_base.QuotaSet({'foo': 12})
 
         quota_set += other_quota_set
-        self.assertEqual(len(quota_set), 2)
+        self.assertEqual(2, len(quota_set))
 
         for q in quota_set:
-            self.assertEqual(q.limit, quota_dict[q.name])
+            self.assertEqual(quota_dict[q.name], q.limit)
 
     def test_quotaset_add_method(self):
         quota_dict = {'foo': 1, 'bar': 10}
@@ -204,11 +274,11 @@ class QuotaSetTests(test.TestCase):
         other_quota_set = api_base.QuotaSet(other_quota_dict)
 
         quota_set.add(other_quota_set)
-        self.assertEqual(len(quota_set), 3)
+        self.assertEqual(3, len(quota_set))
 
         quota_dict.update(other_quota_dict)
         for q in quota_set:
-            self.assertEqual(q.limit, quota_dict[q.name])
+            self.assertEqual(quota_dict[q.name], q.limit)
 
     def test_quotaset_add_with_wrong_type(self):
         quota_set = api_base.QuotaSet({'foo': 1, 'bar': 10})

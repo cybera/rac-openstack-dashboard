@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -42,12 +40,13 @@ class InstanceViewTest(test.BaseAdminViewTests):
         api.nova.extension_supported('AdminActions', IsA(http.HttpRequest)) \
             .MultipleTimes().AndReturn(True)
         api.keystone.tenant_list(IsA(http.HttpRequest)).\
-                                 AndReturn([tenants, False])
+            AndReturn([tenants, False])
         search_opts = {'marker': None, 'paginate': True}
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndReturn([servers, False])
-        api.network.servers_update_addresses(IsA(http.HttpRequest), servers)
+            .AndReturn([servers, False])
+        api.network.servers_update_addresses(IsA(http.HttpRequest), servers,
+                                             all_tenants=True)
         api.nova.flavor_list(IsA(http.HttpRequest)).AndReturn(flavors)
         self.mox.ReplayAll()
 
@@ -57,7 +56,7 @@ class InstanceViewTest(test.BaseAdminViewTests):
         self.assertItemsEqual(instances, servers)
 
     @test.create_stubs({api.nova: ('flavor_list', 'flavor_get',
-                                    'server_list', 'extension_supported',),
+                                   'server_list', 'extension_supported',),
                         api.keystone: ('tenant_list',),
                         api.network: ('servers_update_addresses',)})
     def test_index_flavor_list_exception(self):
@@ -69,14 +68,15 @@ class InstanceViewTest(test.BaseAdminViewTests):
         search_opts = {'marker': None, 'paginate': True}
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndReturn([servers, False])
-        api.network.servers_update_addresses(IsA(http.HttpRequest), servers)
+            .AndReturn([servers, False])
+        api.network.servers_update_addresses(IsA(http.HttpRequest), servers,
+                                             all_tenants=True)
         api.nova.extension_supported('AdminActions', IsA(http.HttpRequest)) \
             .MultipleTimes().AndReturn(True)
         api.nova.flavor_list(IsA(http.HttpRequest)). \
-                            AndRaise(self.exceptions.nova)
+            AndRaise(self.exceptions.nova)
         api.keystone.tenant_list(IsA(http.HttpRequest)).\
-                                 AndReturn([tenants, False])
+            AndReturn([tenants, False])
         for server in servers:
             api.nova.flavor_get(IsA(http.HttpRequest), server.flavor["id"]). \
                 AndReturn(full_flavors[server.flavor["id"]])
@@ -89,7 +89,7 @@ class InstanceViewTest(test.BaseAdminViewTests):
         self.assertItemsEqual(instances, servers)
 
     @test.create_stubs({api.nova: ('flavor_list', 'flavor_get',
-                                    'server_list', 'extension_supported', ),
+                                   'server_list', 'extension_supported', ),
                         api.keystone: ('tenant_list',),
                         api.network: ('servers_update_addresses',)})
     def test_index_flavor_get_exception(self):
@@ -104,14 +104,15 @@ class InstanceViewTest(test.BaseAdminViewTests):
         search_opts = {'marker': None, 'paginate': True}
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndReturn([servers, False])
-        api.network.servers_update_addresses(IsA(http.HttpRequest), servers)
+            .AndReturn([servers, False])
+        api.network.servers_update_addresses(IsA(http.HttpRequest), servers,
+                                             all_tenants=True)
         api.nova.extension_supported('AdminActions', IsA(http.HttpRequest)) \
             .MultipleTimes().AndReturn(True)
         api.nova.flavor_list(IsA(http.HttpRequest)). \
-                            AndReturn(flavors)
+            AndReturn(flavors)
         api.keystone.tenant_list(IsA(http.HttpRequest)).\
-                                 AndReturn([tenants, False])
+            AndReturn([tenants, False])
         for server in servers:
             api.nova.flavor_get(IsA(http.HttpRequest), server.flavor["id"]). \
                 AndRaise(self.exceptions.nova)
@@ -120,7 +121,10 @@ class InstanceViewTest(test.BaseAdminViewTests):
         res = self.client.get(INDEX_URL)
         instances = res.context['table'].data
         self.assertTemplateUsed(res, 'admin/instances/index.html')
-        self.assertMessageCount(res, error=len(servers))
+        # Since error messages produced for each instance are identical,
+        # there will be only one error message for all instances
+        # (messages de-duplication).
+        self.assertMessageCount(res, error=1)
         self.assertItemsEqual(instances, servers)
 
     @test.create_stubs({api.nova: ('server_list',)})
@@ -128,7 +132,7 @@ class InstanceViewTest(test.BaseAdminViewTests):
         search_opts = {'marker': None, 'paginate': True}
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
 
@@ -153,11 +157,11 @@ class InstanceViewTest(test.BaseAdminViewTests):
                                 admin=True).AndReturn(tenant)
         self.mox.ReplayAll()
 
-        url = INDEX_URL + \
-                "?action=row_update&table=instances&obj_id=" + server.id
+        url = (INDEX_URL +
+               "?action=row_update&table=instances&obj_id=" + server.id)
 
         res = self.client.get(url, {},
-                               HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+                              HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
         self.assertTemplateUsed(res, "horizon/common/_data_table_row.html")
         self.assertContains(res, "test_tenant", 1, 200)
@@ -165,7 +169,9 @@ class InstanceViewTest(test.BaseAdminViewTests):
         # two instances of name, other name comes from row data-display
         self.assertContains(res, "server_1", 2, 200)
         self.assertContains(res, "10.0.0.1", 1, 200)
-        self.assertContains(res, "512MB RAM | 1 VCPU | 0Bytes Disk", 1, 200)
+        self.assertContains(res, "RAM</th><td>512MB", 1, 200)
+        self.assertContains(res, "VCPUs</th><td>1", 1, 200)
+        self.assertContains(res, "Size</th><td>0 GB", 1, 200)
         self.assertContains(res, "Active", 1, 200)
         self.assertContains(res, "Running", 1, 200)
 
@@ -180,8 +186,9 @@ class InstanceViewTest(test.BaseAdminViewTests):
         search_opts = {'marker': None, 'paginate': True}
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndReturn([servers, False])
-        api.network.servers_update_addresses(IsA(http.HttpRequest), servers)
+            .AndReturn([servers, False])
+        api.network.servers_update_addresses(IsA(http.HttpRequest), servers,
+                                             all_tenants=True)
         api.nova.extension_supported('AdminActions', IsA(http.HttpRequest)) \
             .MultipleTimes().AndReturn(True)
         api.nova.flavor_list(IsA(http.HttpRequest)).\
@@ -204,16 +211,17 @@ class InstanceViewTest(test.BaseAdminViewTests):
         server2 = servers[2]
         server2.status = "VERIFY_RESIZE"
         api.keystone.tenant_list(IsA(http.HttpRequest)) \
-                    .AndReturn([self.tenants.list(), False])
+            .AndReturn([self.tenants.list(), False])
         search_opts = {'marker': None, 'paginate': True}
         api.nova.extension_supported('AdminActions', IsA(http.HttpRequest)) \
             .MultipleTimes().AndReturn(True)
         api.nova.server_list(IsA(http.HttpRequest),
                              all_tenants=True, search_opts=search_opts) \
-                                .AndReturn([servers, False])
-        api.network.servers_update_addresses(IsA(http.HttpRequest), servers)
+            .AndReturn([servers, False])
+        api.network.servers_update_addresses(IsA(http.HttpRequest), servers,
+                                             all_tenants=True)
         api.nova.flavor_list(IsA(http.HttpRequest)).\
-                             AndReturn(self.flavors.list())
+            AndReturn(self.flavors.list())
         self.mox.ReplayAll()
 
         res = self.client.get(INDEX_URL)
@@ -221,14 +229,14 @@ class InstanceViewTest(test.BaseAdminViewTests):
         self.assertContains(res, "instances__revert")
         self.assertNotContains(res, "instances__migrate")
 
-    @test.create_stubs({api.nova: ('hypervisor_list',
+    @test.create_stubs({api.nova: ('host_list',
                                    'server_get',)})
     def test_instance_live_migrate_get(self):
         server = self.servers.first()
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndReturn(server)
-        api.nova.hypervisor_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.hypervisors.list())
+            .AndReturn(server)
+        api.nova.host_list(IsA(http.HttpRequest)) \
+            .AndReturn(self.hosts.list())
 
         self.mox.ReplayAll()
 
@@ -242,7 +250,7 @@ class InstanceViewTest(test.BaseAdminViewTests):
     def test_instance_live_migrate_get_server_get_exception(self):
         server = self.servers.first()
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
 
@@ -252,14 +260,14 @@ class InstanceViewTest(test.BaseAdminViewTests):
 
         self.assertRedirectsNoFollow(res, INDEX_URL)
 
-    @test.create_stubs({api.nova: ('hypervisor_list',
+    @test.create_stubs({api.nova: ('host_list',
                                    'server_get',)})
     def test_instance_live_migrate_list_hypervisor_get_exception(self):
         server = self.servers.first()
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndReturn(server)
-        api.nova.hypervisor_list(IsA(http.HttpRequest)) \
-                .AndRaise(self.exceptions.nova)
+            .AndReturn(server)
+        api.nova.host_list(IsA(http.HttpRequest)) \
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
         url = reverse('horizon:admin:instances:live_migrate',
@@ -268,14 +276,14 @@ class InstanceViewTest(test.BaseAdminViewTests):
 
         self.assertRedirectsNoFollow(res, INDEX_URL)
 
-    @test.create_stubs({api.nova: ('hypervisor_list',
+    @test.create_stubs({api.nova: ('host_list',
                                    'server_get',)})
     def test_instance_live_migrate_list_hypervisor_without_current(self):
         server = self.servers.first()
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndReturn(server)
-        api.nova.hypervisor_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.hypervisors.list())
+            .AndReturn(server)
+        api.nova.host_list(IsA(http.HttpRequest)) \
+            .AndReturn(self.hosts.list())
 
         self.mox.ReplayAll()
 
@@ -283,28 +291,29 @@ class InstanceViewTest(test.BaseAdminViewTests):
                       args=[server.id])
         res = self.client.get(url)
         self.assertNotContains(
-            res, "<option value=\"devstack003\">devstack003</option>")
+            res, "<option value=\"instance-host\">devstack004</option>")
         self.assertContains(
             res, "<option value=\"devstack001\">devstack001</option>")
-        self.assertContains(
+        self.assertNotContains(
             res, "<option value=\"devstack002\">devstack002</option>")
+        self.assertContains(
+            res, "<option value=\"devstack003\">devstack003</option>")
 
-    @test.create_stubs({api.nova: ('hypervisor_list',
+    @test.create_stubs({api.nova: ('host_list',
                                    'server_get',
                                    'server_live_migrate',)})
     def test_instance_live_migrate_post(self):
         server = self.servers.first()
-        hypervisor = self.hypervisors.first()
-        host = hypervisor.hypervisor_hostname
+        host = self.hosts.first().host_name
 
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndReturn(server)
-        api.nova.hypervisor_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.hypervisors.list())
+            .AndReturn(server)
+        api.nova.host_list(IsA(http.HttpRequest)) \
+            .AndReturn(self.hosts.list())
         api.nova.server_live_migrate(IsA(http.HttpRequest), server.id, host,
                                      block_migration=False,
                                      disk_over_commit=False) \
-                .AndReturn([])
+            .AndReturn([])
 
         self.mox.ReplayAll()
 
@@ -314,22 +323,21 @@ class InstanceViewTest(test.BaseAdminViewTests):
         self.assertNoFormErrors(res)
         self.assertRedirectsNoFollow(res, INDEX_URL)
 
-    @test.create_stubs({api.nova: ('hypervisor_list',
+    @test.create_stubs({api.nova: ('host_list',
                                    'server_get',
                                    'server_live_migrate',)})
     def test_instance_live_migrate_post_api_exception(self):
         server = self.servers.first()
-        hypervisor = self.hypervisors.first()
-        host = hypervisor.hypervisor_hostname
+        host = self.hosts.first().host_name
 
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                .AndReturn(server)
-        api.nova.hypervisor_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.hypervisors.list())
+            .AndReturn(server)
+        api.nova.host_list(IsA(http.HttpRequest)) \
+            .AndReturn(self.hosts.list())
         api.nova.server_live_migrate(IsA(http.HttpRequest), server.id, host,
                                      block_migration=False,
                                      disk_over_commit=False) \
-                .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
 
@@ -343,7 +351,7 @@ class InstanceViewTest(test.BaseAdminViewTests):
         server = self.servers.first()
 
         api.nova.server_get(IsA(http.HttpRequest), server.id) \
-                        .AndRaise(self.exceptions.nova)
+            .AndRaise(self.exceptions.nova)
 
         self.mox.ReplayAll()
 

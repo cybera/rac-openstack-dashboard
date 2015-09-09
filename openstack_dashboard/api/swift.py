@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -20,6 +18,7 @@
 
 import logging
 
+from oslo_utils import timeutils
 import six.moves.urllib.parse as urlparse
 import swiftclient
 
@@ -27,13 +26,14 @@ from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
+from horizon.utils.memoized import memoized  # noqa
 
 from openstack_dashboard.api import base
-from openstack_dashboard.openstack.common import timeutils
 
 
 LOG = logging.getLogger(__name__)
 FOLDER_DELIMITER = "/"
+CHUNK_SIZE = getattr(settings, 'SWIFT_FILE_TRANSFER_CHUNK_SIZE', 512 * 1024)
 # Swift ACL
 GLOBAL_READ_ACL = ".r:*"
 LIST_CONTENTS_ACL = ".rlistings"
@@ -106,17 +106,18 @@ def _metadata_to_header(metadata):
     return headers
 
 
+@memoized
 def swift_api(request):
     endpoint = base.url_for(request, 'object-store')
     cacert = getattr(settings, 'OPENSTACK_SSL_CACERT', None)
-    LOG.debug('Swift connection created using token "%s" and url "%s"'
-              % (request.user.token.id, endpoint))
+    insecure = getattr(settings, 'OPENSTACK_SSL_NO_VERIFY', False)
     return swiftclient.client.Connection(None,
                                          request.user.username,
                                          None,
                                          preauthtoken=request.user.token.id,
                                          preauthurl=endpoint,
                                          cacert=cacert,
+                                         insecure=insecure,
                                          auth_version="2.0")
 
 
@@ -163,7 +164,8 @@ def swift_get_container(request, container_name, with_data=True):
             swift_endpoint = base.url_for(request,
                                           'object-store',
                                           endpoint_type='publicURL')
-            public_url = swift_endpoint + '/' + urlparse.quote(container_name)
+            parameters = urlparse.quote(container_name.encode('utf8'))
+            public_url = swift_endpoint + '/' + parameters
         ts_float = float(headers.get('x-timestamp'))
         timestamp = timeutils.iso8601_from_timestamp(ts_float)
     except Exception:
@@ -199,8 +201,8 @@ def swift_delete_container(request, name):
     # be done in swiftclient instead of Horizon.
     objects, more = swift_get_objects(request, name)
     if objects:
-        error_msg = unicode(_("The container cannot be deleted "
-                              "since it's not empty."))
+        error_msg = _("The container cannot be deleted "
+                      "since it is not empty.")
         exc = exceptions.Conflict(error_msg)
         exc._safe_message = error_msg
         raise exc
@@ -217,7 +219,7 @@ def swift_get_objects(request, container_name, prefix=None, marker=None,
                   delimiter=FOLDER_DELIMITER,
                   full_listing=True)
     headers, objects = swift_api(request).get_container(container_name,
-                                                          **kwargs)
+                                                        **kwargs)
     object_objs = _objectify(objects, container_name)
 
     if(len(object_objs) > limit):
@@ -306,14 +308,30 @@ def swift_create_pseudo_folder(request, container_name, pseudo_folder_name):
 
 
 def swift_delete_object(request, container_name, object_name):
+    objects, more = swift_get_objects(request, container_name,
+                                      prefix=object_name)
+    # In case the given object is pseudo folder,
+    # it can be deleted only if it is empty.
+    # swift_get_objects will return at least
+    # one object (i.e container_name) even if the
+    # given pseudo folder is empty. So if swift_get_objects
+    # returns more than one object then only it will be
+    # considered as non empty folder.
+    if len(objects) > 1:
+        error_msg = _("The pseudo folder cannot be deleted "
+                      "since it is not empty.")
+        exc = exceptions.Conflict(error_msg)
+        exc._safe_message = error_msg
+        raise exc
     swift_api(request).delete_object(container_name, object_name)
     return True
 
 
-def swift_get_object(request, container_name, object_name, with_data=True):
+def swift_get_object(request, container_name, object_name, with_data=True,
+                     resp_chunk_size=CHUNK_SIZE):
     if with_data:
-        headers, data = swift_api(request).get_object(container_name,
-                                                      object_name)
+        headers, data = swift_api(request).get_object(
+            container_name, object_name, resp_chunk_size=resp_chunk_size)
     else:
         data = None
         headers = swift_api(request).head_object(container_name,

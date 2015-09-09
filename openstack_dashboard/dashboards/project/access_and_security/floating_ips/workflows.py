@@ -1,6 +1,3 @@
-
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -18,8 +15,11 @@
 from django.core.urlresolvers import reverse
 from django.utils.translation import ugettext_lazy as _
 
+from neutronclient.common import exceptions as neutron_exc
+
 from horizon import exceptions
 from horizon import forms
+from horizon.utils import memoized
 from horizon import workflows
 
 from openstack_dashboard import api
@@ -36,10 +36,10 @@ class AssociateIPAction(workflows.Action):
                                           add_item_link=ALLOCATE_URL)
     instance_id = forms.ChoiceField(label=_("Instance"))
 
-    class Meta:
+    class Meta(object):
         name = _("IP Address")
         help_text = _("Select the IP address you wish to associate with "
-                      "the selected instance.")
+                      "the selected instance or port.")
 
     def __init__(self, *args, **kwargs):
         super(AssociateIPAction, self).__init__(*args, **kwargs)
@@ -56,16 +56,19 @@ class AssociateIPAction(workflows.Action):
         # and set the initial value of instance_id ChoiceField.
         q_instance_id = self.request.GET.get('instance_id')
         if q_instance_id:
+            targets = self._get_target_list()
             target_id = api.network.floating_ip_target_get_by_instance(
-                self.request, q_instance_id)
+                self.request, q_instance_id, targets)
             self.initial['instance_id'] = target_id
 
     def populate_ip_id_choices(self, request, context):
         ips = []
+        redirect = reverse('horizon:project:access_and_security:index')
         try:
             ips = api.network.tenant_floating_ip_list(self.request)
+        except neutron_exc.ConnectionFailed:
+            exceptions.handle(self.request, redirect=redirect)
         except Exception:
-            redirect = reverse('horizon:project:access_and_security:index')
             exceptions.handle(self.request,
                               _('Unable to retrieve floating IP addresses.'),
                               redirect=redirect)
@@ -73,11 +76,12 @@ class AssociateIPAction(workflows.Action):
         if options:
             options.insert(0, ("", _("Select an IP address")))
         else:
-            options = [("", _("No IP addresses available"))]
+            options = [("", _("No floating IP addresses allocated"))]
 
         return options
 
-    def populate_instance_id_choices(self, request, context):
+    @memoized.memoized_method
+    def _get_target_list(self):
         targets = []
         try:
             targets = api.network.floating_ip_target_list(self.request)
@@ -86,6 +90,11 @@ class AssociateIPAction(workflows.Action):
             exceptions.handle(self.request,
                               _('Unable to retrieve instance list.'),
                               redirect=redirect)
+        return targets
+
+    def populate_instance_id_choices(self, request, context):
+        targets = self._get_target_list()
+
         instances = []
         for target in targets:
             instances.append((target.id, target.name))
@@ -132,13 +141,24 @@ class IPAssociationWorkflow(workflows.Workflow):
     default_steps = (AssociateIP,)
 
     def format_status_message(self, message):
-        return message % self.context.get('ip_address', 'unknown IP address')
+        if "%s" in message:
+            return message % self.context.get('ip_address',
+                                              _('unknown IP address'))
+        else:
+            return message
 
     def handle(self, request, data):
         try:
             api.network.floating_ip_associate(request,
                                               data['ip_id'],
                                               data['instance_id'])
+        except neutron_exc.Conflict:
+            msg = _('The requested instance port is already'
+                    ' associated with another floating IP.')
+            exceptions.handle(request, msg)
+            self.failure_message = msg
+            return False
+
         except Exception:
             exceptions.handle(request)
             return False

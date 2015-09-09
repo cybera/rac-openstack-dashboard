@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Rackspace Hosting
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -22,7 +20,7 @@ from openstack_dashboard.dashboards.project import dashboard
 
 
 class Backups(horizon.Panel):
-    name = _("Database Backups")
+    name = _("Backups")
     slug = 'database_backups'
     permissions = ('openstack.services.database',
                    'openstack.services.object-store',)

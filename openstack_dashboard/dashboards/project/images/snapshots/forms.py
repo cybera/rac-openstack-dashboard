@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -32,7 +30,7 @@ class CreateSnapshot(forms.SelfHandlingForm):
     instance_id = forms.CharField(label=_("Instance ID"),
                                   widget=forms.HiddenInput(),
                                   required=False)
-    name = forms.CharField(max_length="255", label=_("Snapshot Name"))
+    name = forms.CharField(max_length=255, label=_("Snapshot Name"))
 
     def handle(self, request, data):
         try:

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -28,11 +26,13 @@ from django.conf import settings
 from django.utils.functional import cached_property  # noqa
 from django.utils.translation import ugettext_lazy as _
 
-from novaclient.v1_1 import client as nova_client
-from novaclient.v1_1.contrib import list_extensions as nova_list_extensions
-from novaclient.v1_1 import security_group_rules as nova_rules
-from novaclient.v1_1 import security_groups as nova_security_groups
-from novaclient.v1_1 import servers as nova_servers
+from novaclient import exceptions as nova_exceptions
+from novaclient.v2 import client as nova_client
+from novaclient.v2.contrib import instance_action as nova_instance_action
+from novaclient.v2.contrib import list_extensions as nova_list_extensions
+from novaclient.v2 import security_group_rules as nova_rules
+from novaclient.v2 import security_groups as nova_security_groups
+from novaclient.v2 import servers as nova_servers
 
 from horizon import conf
 from horizon.utils import functions as utils
@@ -52,39 +52,49 @@ DEFAULT_QUOTA_NAME = 'default'
 
 
 class VNCConsole(base.APIDictWrapper):
-    """Wrapper for the "console" dictionary returned by the
-    novaclient.servers.get_vnc_console method.
+    """Wrapper for the "console" dictionary.
+
+    Returned by the novaclient.servers.get_vnc_console method.
     """
     _attrs = ['url', 'type']
 
 
 class SPICEConsole(base.APIDictWrapper):
-    """Wrapper for the "console" dictionary returned by the
-    novaclient.servers.get_spice_console method.
+    """Wrapper for the "console" dictionary.
+
+    Returned by the novaclient.servers.get_spice_console method.
     """
     _attrs = ['url', 'type']
 
 
 class RDPConsole(base.APIDictWrapper):
-    """Wrapper for the "console" dictionary returned by the
-    novaclient.servers.get_rdp_console method.
+    """Wrapper for the "console" dictionary.
+
+    Returned by the novaclient.servers.get_rdp_console method.
+    """
+    _attrs = ['url', 'type']
+
+
+class SerialConsole(base.APIDictWrapper):
+    """Wrapper for the "console" dictionary.
+
+    Returned by the novaclient.servers.get_serial_console method.
     """
     _attrs = ['url', 'type']
 
 
 class Server(base.APIResourceWrapper):
-    """Simple wrapper around novaclient.server.Server
+    """Simple wrapper around novaclient.server.Server.
 
-       Preserves the request info so image name can later be retrieved
-
+    Preserves the request info so image name can later be retrieved.
     """
     _attrs = ['addresses', 'attrs', 'id', 'image', 'links',
-             'metadata', 'name', 'private_ip', 'public_ip', 'status', 'uuid',
-             'image_name', 'VirtualInterfaces', 'flavor', 'key_name', 'fault',
-             'tenant_id', 'user_id', 'created', 'OS-EXT-STS:power_state',
-             'OS-EXT-STS:task_state', 'OS-EXT-SRV-ATTR:instance_name',
-             'OS-EXT-SRV-ATTR:host', 'OS-EXT-AZ:availability_zone',
-             'OS-DCF:diskConfig']
+              'metadata', 'name', 'private_ip', 'public_ip', 'status', 'uuid',
+              'image_name', 'VirtualInterfaces', 'flavor', 'key_name', 'fault',
+              'tenant_id', 'user_id', 'created', 'OS-EXT-STS:power_state',
+              'OS-EXT-STS:task_state', 'OS-EXT-SRV-ATTR:instance_name',
+              'OS-EXT-SRV-ATTR:host', 'OS-EXT-AZ:availability_zone',
+              'OS-DCF:diskConfig']
 
     def __init__(self, apiresource, request):
         super(Server, self).__init__(apiresource)
@@ -93,10 +103,11 @@ class Server(base.APIResourceWrapper):
     # TODO(gabriel): deprecate making a call to Glance as a fallback.
     @property
     def image_name(self):
-        import glanceclient.exc as glance_exceptions
-        from openstack_dashboard.api import glance
+        import glanceclient.exc as glance_exceptions  # noqa
+        from openstack_dashboard.api import glance  # noqa
+
         if not self.image:
-            return "(not found)"
+            return _("-")
         if hasattr(self.image, 'name'):
             return self.image.name
         if 'name' in self.image:
@@ -106,7 +117,7 @@ class Server(base.APIResourceWrapper):
                 image = glance.image_get(self.request, self.image['id'])
                 return image.name
             except glance_exceptions.ClientException:
-                return "(not found)"
+                return _("-")
 
     @property
     def internal_name(self):
@@ -116,12 +127,35 @@ class Server(base.APIResourceWrapper):
     def availability_zone(self):
         return getattr(self, 'OS-EXT-AZ:availability_zone', "")
 
+    @property
+    def host_server(self):
+        return getattr(self, 'OS-EXT-SRV-ATTR:host', '')
+
+
+class Hypervisor(base.APIDictWrapper):
+    """Simple wrapper around novaclient.hypervisors.Hypervisor."""
+
+    _attrs = ['manager', '_loaded', '_info', 'hypervisor_hostname', 'id',
+              'servers']
+
+    @property
+    def servers(self):
+        # if hypervisor doesn't have servers, the attribute is not present
+        servers = []
+        try:
+            servers = self._apidict.servers
+        except Exception:
+            pass
+
+        return servers
+
 
 class NovaUsage(base.APIResourceWrapper):
     """Simple wrapper around contrib/simple_usage.py."""
+
     _attrs = ['start', 'server_usages', 'stop', 'tenant_id',
-             'total_local_gb_usage', 'total_memory_mb_usage',
-             'total_vcpus_usage', 'total_hours']
+              'total_local_gb_usage', 'total_memory_mb_usage',
+              'total_vcpus_usage', 'total_hours']
 
     def get_summary(self):
         return {'instances': self.total_active_instances,
@@ -129,7 +163,8 @@ class NovaUsage(base.APIResourceWrapper):
                 'vcpus': getattr(self, "total_vcpus_usage", 0),
                 'vcpu_hours': self.vcpu_hours,
                 'local_gb': self.local_gb,
-                'disk_gb_hours': self.disk_gb_hours}
+                'disk_gb_hours': self.disk_gb_hours,
+                'memory_mb_hours': self.memory_mb_hours}
 
     @property
     def total_active_instances(self):
@@ -158,11 +193,17 @@ class NovaUsage(base.APIResourceWrapper):
     def disk_gb_hours(self):
         return getattr(self, "total_local_gb_usage", 0)
 
+    @property
+    def memory_mb_hours(self):
+        return getattr(self, "total_memory_mb_usage", 0)
+
 
 class SecurityGroup(base.APIResourceWrapper):
-    """Wrapper around novaclient.security_groups.SecurityGroup which wraps its
-    rules in SecurityGroupRule objects and allows access to them.
+    """Wrapper around novaclient.security_groups.SecurityGroup.
+
+    Wraps its rules in SecurityGroupRule objects and allows access to them.
     """
+
     _attrs = ['id', 'name', 'description', 'tenant_id']
 
     @cached_property
@@ -173,9 +214,13 @@ class SecurityGroup(base.APIResourceWrapper):
                      for rule in self._apiresource.rules]
         return [SecurityGroupRule(rule) for rule in rule_objs]
 
+    def to_dict(self):
+        return self._apiresource.to_dict()
+
 
 class SecurityGroupRule(base.APIResourceWrapper):
     """Wrapper for individual rules in a SecurityGroup."""
+
     _attrs = ['id', 'ip_protocol', 'from_port', 'to_port', 'ip_range', 'group']
 
     def __unicode__(self):
@@ -287,9 +332,24 @@ class SecurityGroupManager(network_base.SecurityGroupManager):
             for group in groups_to_remove:
                 self.client.servers.remove_security_group(instance_id, group)
                 num_groups_to_modify -= 1
-        except Exception:
-            raise Exception(_('Failed to modify %d instance security groups.')
-                            % num_groups_to_modify)
+        except nova_exceptions.ClientException as err:
+            LOG.error(_("Failed to modify %(num_groups_to_modify)d instance "
+                        "security groups: %(err)s") %
+                      dict(num_groups_to_modify=num_groups_to_modify,
+                           err=err))
+            # reraise novaclient.exceptions.ClientException, but with
+            # a sanitized error message so we don't risk exposing
+            # sensitive information to the end user. This has to be
+            # novaclient.exceptions.ClientException, not just
+            # Exception, since the former is recognized as a
+            # "recoverable" exception by horizon, and therefore the
+            # error message is passed along to the end user, while
+            # Exception is swallowed alive by horizon and a gneric
+            # error message is given to the end user
+            raise nova_exceptions.ClientException(
+                err.code,
+                _("Failed to modify %d instance security groups") %
+                num_groups_to_modify)
         return True
 
 
@@ -302,10 +362,13 @@ class FlavorExtraSpec(object):
 
 
 class FloatingIp(base.APIResourceWrapper):
-    _attrs = ['id', 'ip', 'fixed_ip', 'port_id', 'instance_id', 'pool']
+    _attrs = ['id', 'ip', 'fixed_ip', 'port_id', 'instance_id',
+              'instance_type', 'pool']
 
     def __init__(self, fip):
         fip.__setattr__('port_id', fip.instance_id)
+        fip.__setattr__('instance_type',
+                        'compute' if fip.instance_id else None)
         super(FloatingIp, self).__init__(fip)
 
 
@@ -351,7 +414,7 @@ class FloatingIpManager(network_base.FloatingIpManager):
         fip = self.client.floating_ips.get(floating_ip_id)
         self.client.servers.add_floating_ip(server.id, fip.ip)
 
-    def disassociate(self, floating_ip_id, port_id):
+    def disassociate(self, floating_ip_id):
         fip = self.client.floating_ips.get(floating_ip_id)
         server = self.client.servers.get(fip.instance_id)
         self.client.servers.remove_floating_ip(server.id, fip.ip)
@@ -359,21 +422,23 @@ class FloatingIpManager(network_base.FloatingIpManager):
     def list_targets(self):
         return [FloatingIpTarget(s) for s in self.client.servers.list()]
 
-    def get_target_id_by_instance(self, instance_id):
+    def get_target_id_by_instance(self, instance_id, target_list=None):
         return instance_id
 
-    def list_target_id_by_instance(self, instance_id):
+    def list_target_id_by_instance(self, instance_id, target_list=None):
         return [instance_id, ]
 
     def is_simple_associate_supported(self):
         return conf.HORIZON_CONFIG["simple_ip_management"]
 
+    def is_supported(self):
+        return True
 
+
+@memoized
 def novaclient(request):
     insecure = getattr(settings, 'OPENSTACK_SSL_NO_VERIFY', False)
     cacert = getattr(settings, 'OPENSTACK_SSL_CACERT', None)
-    LOG.debug('novaclient connection created using token "%s" and url "%s"' %
-              (request.user.token.id, base.url_for(request, 'compute')))
     c = nova_client.Client(request.user.username,
                            request.user.token.id,
                            project_id=request.user.tenant_id,
@@ -387,8 +452,8 @@ def novaclient(request):
 
 
 def server_vnc_console(request, instance_id, console_type='novnc'):
-    return VNCConsole(novaclient(request).servers.get_vnc_console(instance_id,
-                                                  console_type)['console'])
+    return VNCConsole(novaclient(request).servers.get_vnc_console(
+        instance_id, console_type)['console'])
 
 
 def server_spice_console(request, instance_id, console_type='spice-html5'):
@@ -398,6 +463,11 @@ def server_spice_console(request, instance_id, console_type='spice-html5'):
 
 def server_rdp_console(request, instance_id, console_type='rdp-html5'):
     return RDPConsole(novaclient(request).servers.get_rdp_console(
+        instance_id, console_type)['console'])
+
+
+def server_serial_console(request, instance_id, console_type='serial'):
+    return SerialConsole(novaclient(request).servers.get_serial_console(
         instance_id, console_type)['console'])
 
 
@@ -416,14 +486,21 @@ def flavor_delete(request, flavor_id):
     novaclient(request).flavors.delete(flavor_id)
 
 
-def flavor_get(request, flavor_id):
-    return novaclient(request).flavors.get(flavor_id)
+def flavor_get(request, flavor_id, get_extras=False):
+    flavor = novaclient(request).flavors.get(flavor_id)
+    if get_extras:
+        flavor.extras = flavor_get_extras(request, flavor.id, True, flavor)
+    return flavor
 
 
 @memoized
-def flavor_list(request, is_public=True):
+def flavor_list(request, is_public=True, get_extras=False):
     """Get the list of available instance sizes (flavors)."""
-    return novaclient(request).flavors.list(is_public=is_public)
+    flavors = novaclient(request).flavors.list(is_public=is_public)
+    if get_extras:
+        for flavor in flavors:
+            flavor.extras = flavor_get_extras(request, flavor.id, True, flavor)
+    return flavors
 
 
 @memoized
@@ -444,9 +521,10 @@ def remove_tenant_from_flavor(request, flavor, tenant):
         flavor=flavor, tenant=tenant)
 
 
-def flavor_get_extras(request, flavor_id, raw=False):
+def flavor_get_extras(request, flavor_id, raw=False, flavor=None):
     """Get flavor extra specs."""
-    flavor = novaclient(request).flavors.get(flavor_id)
+    if flavor is None:
+        flavor = novaclient(request).flavors.get(flavor_id)
     extras = flavor.get_keys()
     if raw:
         return extras
@@ -488,11 +566,15 @@ def keypair_list(request):
     return novaclient(request).keypairs.list()
 
 
+def keypair_get(request, keypair_id):
+    return novaclient(request).keypairs.get(keypair_id)
+
+
 def server_create(request, name, image, flavor, key_name, user_data,
                   security_groups, block_device_mapping=None,
                   block_device_mapping_v2=None, nics=None,
                   availability_zone=None, instance_count=1, admin_pass=None,
-                  disk_config=None):
+                  disk_config=None, config_drive=None, meta=None):
     return Server(novaclient(request).servers.create(
         name, image, flavor, userdata=user_data,
         security_groups=security_groups,
@@ -500,7 +582,8 @@ def server_create(request, name, image, flavor, key_name, user_data,
         block_device_mapping_v2=block_device_mapping_v2,
         nics=nics, availability_zone=availability_zone,
         min_count=instance_count, admin_pass=admin_pass,
-        disk_config=disk_config), request)
+        disk_config=disk_config, config_drive=config_drive,
+        meta=meta), request)
 
 
 def server_delete(request, instance):
@@ -527,7 +610,7 @@ def server_list(request, search_opts=None, all_tenants=False):
     else:
         search_opts['project_id'] = request.user.tenant_id
     servers = [Server(s, request)
-                for s in c.servers.list(True, search_opts)]
+               for s in c.servers.list(True, search_opts)]
 
     has_more_data = False
     if paginate and len(servers) > page_size:
@@ -610,6 +693,14 @@ def server_stop(request, instance_id):
     novaclient(request).servers.stop(instance_id)
 
 
+def server_lock(request, instance_id):
+    novaclient(request).servers.lock(instance_id)
+
+
+def server_unlock(request, instance_id):
+    novaclient(request).servers.unlock(instance_id)
+
+
 def tenant_quota_get(request, tenant_id):
     return base.QuotaSet(novaclient(request).quotas.get(tenant_id))
 
@@ -620,6 +711,10 @@ def tenant_quota_update(request, tenant_id, **kwargs):
 
 def default_quota_get(request, tenant_id):
     return base.QuotaSet(novaclient(request).quotas.defaults(tenant_id))
+
+
+def default_quota_update(request, **kwargs):
+    novaclient(request).quota_classes.update(DEFAULT_QUOTA_NAME, **kwargs)
 
 
 def usage_get(request, tenant_id, start, end):
@@ -649,23 +744,23 @@ def get_password(request, instance_id, private_key=None):
 
 def instance_volume_attach(request, volume_id, instance_id, device):
     return novaclient(request).volumes.create_server_volume(instance_id,
-                                                              volume_id,
-                                                              device)
+                                                            volume_id,
+                                                            device)
 
 
 def instance_volume_detach(request, instance_id, att_id):
     return novaclient(request).volumes.delete_server_volume(instance_id,
-                                                              att_id)
+                                                            att_id)
 
 
 def instance_volumes_list(request, instance_id):
-    from openstack_dashboard.api.cinder import cinderclient  # noqa
+    from openstack_dashboard.api import cinder
 
     volumes = novaclient(request).volumes.get_server_volumes(instance_id)
 
     for volume in volumes:
-        volume_data = cinderclient(request).volumes.get(volume.id)
-        volume.name = volume_data.display_name
+        volume_data = cinder.cinderclient(request).volumes.get(volume.id)
+        volume.name = cinder.Volume(volume_data).name
 
     return volumes
 
@@ -682,13 +777,81 @@ def hypervisor_search(request, query, servers=True):
     return novaclient(request).hypervisors.search(query, servers)
 
 
+def evacuate_host(request, host, target=None, on_shared_storage=False):
+    # TODO(jmolle) This should be change for nova atomic api host_evacuate
+    hypervisors = novaclient(request).hypervisors.search(host, True)
+    response = []
+    err_code = None
+    for hypervisor in hypervisors:
+        hyper = Hypervisor(hypervisor)
+        # if hypervisor doesn't have servers, the attribute is not present
+        for server in hyper.servers:
+            try:
+                novaclient(request).servers.evacuate(server['uuid'],
+                                                     target,
+                                                     on_shared_storage)
+            except nova_exceptions.ClientException as err:
+                err_code = err.code
+                msg = _("Name: %(name)s ID: %(uuid)s")
+                msg = msg % {'name': server['name'], 'uuid': server['uuid']}
+                response.append(msg)
+
+    if err_code:
+        msg = _('Failed to evacuate instances: %s') % ', '.join(response)
+        raise nova_exceptions.ClientException(err_code, msg)
+
+    return True
+
+
+def migrate_host(request, host, live_migrate=False, disk_over_commit=False,
+                 block_migration=False):
+    hypervisors = novaclient(request).hypervisors.search(host, True)
+    response = []
+    err_code = None
+    for hyper in hypervisors:
+        for server in getattr(hyper, "servers", []):
+            try:
+                if live_migrate:
+                    instance = server_get(request, server['uuid'])
+
+                    # Checking that instance can be live-migrated
+                    if instance.status in ["ACTIVE", "PAUSED"]:
+                        novaclient(request).servers.live_migrate(
+                            server['uuid'],
+                            None,
+                            block_migration,
+                            disk_over_commit
+                        )
+                    else:
+                        novaclient(request).servers.migrate(server['uuid'])
+                else:
+                    novaclient(request).servers.migrate(server['uuid'])
+            except nova_exceptions.ClientException as err:
+                err_code = err.code
+                msg = _("Name: %(name)s ID: %(uuid)s")
+                msg = msg % {'name': server['name'], 'uuid': server['uuid']}
+                response.append(msg)
+
+    if err_code:
+        msg = _('Failed to migrate instances: %s') % ', '.join(response)
+        raise nova_exceptions.ClientException(err_code, msg)
+
+    return True
+
+
 def tenant_absolute_limits(request, reserved=False):
     limits = novaclient(request).limits.get(reserved=reserved).absolute
     limits_dict = {}
     for limit in limits:
-        # -1 is used to represent unlimited quotas
-        if limit.value == -1:
-            limits_dict[limit.name] = float("inf")
+        if limit.value < 0:
+            # Workaround for nova bug 1370867 that absolute_limits
+            # returns negative value for total.*Used instead of 0.
+            # For such case, replace negative values with 0.
+            if limit.name.startswith('total') and limit.name.endswith('Used'):
+                limits_dict[limit.name] = 0
+            else:
+                # -1 is used to represent unlimited quotas
+                limits_dict[limit.name] = float("inf")
         else:
             limits_dict[limit.name] = limit.value
     return limits_dict
@@ -698,8 +861,20 @@ def availability_zone_list(request, detailed=False):
     return novaclient(request).availability_zones.list(detailed=detailed)
 
 
-def service_list(request):
-    return novaclient(request).services.list()
+def service_list(request, binary=None):
+    return novaclient(request).services.list(binary=binary)
+
+
+def service_enable(request, host, binary):
+    return novaclient(request).services.enable(host, binary)
+
+
+def service_disable(request, host, binary, reason=None):
+    if reason:
+        return novaclient(request).services.disable_log_reason(host,
+                                                               binary, reason)
+    else:
+        return novaclient(request).services.disable(host, binary)
 
 
 def aggregate_details_list(request):
@@ -726,6 +901,10 @@ def aggregate_update(request, aggregate_id, values):
     return novaclient(request).aggregates.update(aggregate_id, values)
 
 
+def aggregate_set_metadata(request, aggregate_id, metadata):
+    return novaclient(request).aggregates.set_metadata(aggregate_id, metadata)
+
+
 def host_list(request):
     return novaclient(request).hosts.list()
 
@@ -745,8 +924,9 @@ def list_extensions(request):
 
 @memoized
 def extension_supported(extension_name, request):
-    """this method will determine if nova supports a given extension name.
-    example values for the extension_name include AdminActions, ConsoleOutput,
+    """Determine if nova supports a given extension name.
+
+    Example values for the extension_name include AdminActions, ConsoleOutput,
     etc.
     """
     extensions = list_extensions(request)
@@ -759,3 +939,15 @@ def extension_supported(extension_name, request):
 def can_set_server_password():
     features = getattr(settings, 'OPENSTACK_HYPERVISOR_FEATURES', {})
     return features.get('can_set_password', False)
+
+
+def instance_action_list(request, instance_id):
+    return nova_instance_action.InstanceActionManager(
+        novaclient(request)).list(instance_id)
+
+
+def can_set_mount_point():
+    """Return the Hypervisor's capability of setting mount points."""
+    hypervisor_features = getattr(
+        settings, "OPENSTACK_HYPERVISOR_FEATURES", {})
+    return hypervisor_features.get("can_set_mount_point", False)

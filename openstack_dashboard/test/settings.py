@@ -14,16 +14,18 @@ import os
 
 from horizon.test.settings import *  # noqa
 from horizon.utils import secret_key
-
 from openstack_dashboard import exceptions
+from openstack_dashboard.static_settings import get_staticfiles_dirs  # noqa
 
+STATICFILES_DIRS = get_staticfiles_dirs()
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_PATH = os.path.abspath(os.path.join(TEST_DIR, ".."))
+STATIC_ROOT = os.path.abspath(os.path.join(ROOT_PATH, '..', 'static'))
 
 SECRET_KEY = secret_key.generate_or_read_from_file(
     os.path.join(TEST_DIR, '.secret_key_store'))
-ROOT_URLCONF = 'openstack_dashboard.urls'
+ROOT_URLCONF = 'openstack_dashboard.test.urls'
 TEMPLATE_DIRS = (
     os.path.join(TEST_DIR, 'templates'),
 )
@@ -46,14 +48,9 @@ INSTALLED_APPS = (
     'openstack_dashboard',
     'openstack_dashboard.dashboards.project',
     'openstack_dashboard.dashboards.admin',
+    'openstack_dashboard.dashboards.identity',
     'openstack_dashboard.dashboards.settings',
-    # If the profile_support config is turned on in local_settings
-    # the "router" dashboard will be enabled which can be used to
-    # create and use profiles with networks and instances. In which case
-    # using run_tests will require the registration of the "router" dashboard.
-    # TODO (absubram): Need to make this permanent when a better solution
-    # for run_tests is implemented to use with and without the n1k sub-plugin.
-    #'openstack_dashboard.dashboards.router',
+    'openstack_dashboard.dashboards.router',
 )
 
 AUTHENTICATION_BACKENDS = ('openstack_auth.backend.KeystoneBackend',)
@@ -61,14 +58,7 @@ AUTHENTICATION_BACKENDS = ('openstack_auth.backend.KeystoneBackend',)
 SITE_BRANDING = 'OpenStack'
 
 HORIZON_CONFIG = {
-    'dashboards': ('project', 'admin', 'settings',),
-    # If the profile_support config is turned on in local_settings
-    # the "router" dashboard will be enabled which can be used to
-    # create and use profiles with networks and instances. In which case
-    # using run_tests will require the registration of the "router" dashboard.
-    # TODO (absubram): Need to make this permanent when a better solution
-    # for run_tests is implemented to use with and without the n1k sub-plugin.
-    #'dashboards': ('project', 'admin', 'settings', 'router',),
+    'dashboards': ('project', 'admin', 'identity', 'settings', 'router',),
     'default_dashboard': 'project',
     "password_validator": {
         "regex": '^.{8,18}$',
@@ -79,6 +69,8 @@ HORIZON_CONFIG = {
     'exceptions': {'recoverable': exceptions.RECOVERABLE,
                    'not_found': exceptions.NOT_FOUND,
                    'unauthorized': exceptions.UNAUTHORIZED},
+    'angular_modules': [],
+    'js_files': [],
 }
 
 # Set to True to allow users to upload images to glance via Horizon server.
@@ -110,19 +102,25 @@ OPENSTACK_KEYSTONE_BACKEND = {
     'can_edit_role': True
 }
 
+OPENSTACK_CINDER_FEATURES = {
+    'enable_backup': True,
+}
+
 OPENSTACK_NEUTRON_NETWORK = {
-    'enable_lb': True,
-    'enable_firewall': True,
+    'enable_router': True,
     'enable_quotas': False,  # Enabled in specific tests only
-    'enable_vpn': True,
-    # If the profile_support config is turned on in local_settings
-    # the "router" dashboard will be enabled which can be used to
-    # create and use profiles with networks and instances. In which case
-    # using run_tests will require the registration of the "router" dashboard.
-    # TODO (absubram): Need to make this permanent when a better solution
-    # for run_tests is implemented to use with and without the n1k sub-plugin.
+    # Parameters below (enable_lb, enable_firewall, enable_vpn)
+    # control if these panels are displayed or not,
+    # i.e. they only affect the navigation menu.
+    # These panels are registered even if enable_XXX is False,
+    # so we don't need to set them to True in most unit tests
+    # to avoid stubbing neutron extension check calls.
+    'enable_lb': False,
+    'enable_firewall': False,
+    'enable_vpn': False,
     'profile_support': None,
-    #'profile_support': 'cisco'
+    'enable_distributed_router': False,
+    # 'profile_support': 'cisco'
 }
 
 OPENSTACK_HYPERVISOR_FEATURES = {
@@ -132,7 +130,7 @@ OPENSTACK_HYPERVISOR_FEATURES = {
 
 OPENSTACK_IMAGE_BACKEND = {
     'image_formats': [
-        ('', ''),
+        ('', 'Select format'),
         ('aki', 'AKI - Amazon Kernel Image'),
         ('ami', 'AMI - Amazon Machine Image'),
         ('ari', 'ARI - Amazon Ramdisk Image'),
@@ -205,16 +203,11 @@ POLICY_FILES = {
     'compute': 'nova_policy.json'
 }
 
-FLAVOR_EXTRA_KEYS = {
-    'flavor_keys': [
-        ('quota:read_bytes_sec', 'Quota: Read bytes'),
-        ('quota:write_bytes_sec', 'Quota: Write bytes'),
-        ('quota:cpu_quota', 'Quota: CPU'),
-        ('quota:cpu_period', 'Quota: CPU period'),
-        ('quota:inbound_average', 'Quota: Inbound average'),
-        ('quota:outbound_average', 'Quota: Outbound average'),
-    ]
-}
-
 # The openstack_auth.user.Token object isn't JSON-serializable ATM
 SESSION_SERIALIZER = 'django.contrib.sessions.serializers.PickleSerializer'
+
+REST_API_SETTING_1 = 'foo'
+REST_API_SETTING_2 = 'bar'
+REST_API_SECURITY = 'SECURITY'
+REST_API_REQUIRED_SETTINGS = ['REST_API_SETTING_1']
+REST_API_ADDITIONAL_SETTINGS = ['REST_API_SETTING_2']

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 NEC Corporation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,13 +12,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.core.urlresolvers import reverse
 from django.utils.translation import ugettext_lazy as _
 
-from horizon import exceptions
 from horizon import tabs
-
-from openstack_dashboard import api
 
 
 class OverviewTab(tabs.Tab):
@@ -29,13 +23,7 @@ class OverviewTab(tabs.Tab):
     template_name = "project/networks/subnets/_detail_overview.html"
 
     def get_context_data(self, request):
-        subnet_id = self.tab_group.kwargs['subnet_id']
-        try:
-            subnet = api.neutron.subnet_get(self.request, subnet_id)
-        except Exception:
-            redirect = reverse('horizon:project:networks:index')
-            msg = _('Unable to retrieve subnet details.')
-            exceptions.handle(request, msg, redirect=redirect)
+        subnet = self.tab_group.kwargs['subnet']
         return {'subnet': subnet}
 
 

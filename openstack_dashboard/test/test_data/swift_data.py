@@ -11,12 +11,11 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+from oslo_utils import timeutils
 
 from django.utils import http as utils_http
 
 from openstack_dashboard.api import swift
-from openstack_dashboard.openstack.common import timeutils
-
 from openstack_dashboard.test.test_data import utils
 
 
@@ -69,12 +68,18 @@ def data(TEST):
                      "last_modified": None,
                      "hash": u"object_hash_2"}
     object_dict_3 = {"name": u"test,object_three%\u6346",
-                   "content_type": u"text/plain",
-                   "bytes": 128,
-                   "timestamp": timeutils.isotime(),
-                   "last_modified": None,
-                   "hash": u"object_hash"}
-    obj_dicts = [object_dict, object_dict_2, object_dict_3]
+                     "content_type": u"text/plain",
+                     "bytes": 128,
+                     "timestamp": timeutils.isotime(),
+                     "last_modified": None,
+                     "hash": u"object_hash"}
+    object_dict_4 = {"name": u"test.txt",
+                     "content_type": u"text/plain",
+                     "bytes": 128,
+                     "timestamp": timeutils.isotime(),
+                     "last_modified": None,
+                     "hash": u"object_hash"}
+    obj_dicts = [object_dict, object_dict_2, object_dict_3, object_dict_4]
     obj_data = "Fake Data"
 
     for obj_dict in obj_dicts:

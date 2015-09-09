@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -20,7 +18,8 @@
 
 from django.core.urlresolvers import reverse
 from django.core import validators
-from django.utils.encoding import force_unicode
+from django.utils.encoding import force_text
+from django.utils.translation import pgettext_lazy
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
@@ -28,7 +27,7 @@ from horizon import forms
 from horizon import messages
 
 from openstack_dashboard import api
-from openstack_dashboard.dashboards.project.containers import tables
+from openstack_dashboard.dashboards.project.containers import utils
 
 
 no_slash_validator = validators.RegexValidator(r'^(?u)[^/]+$',
@@ -50,7 +49,6 @@ class CreateContainer(forms.SelfHandlingForm):
                            label=_("Container Name"),
                            validators=[no_slash_validator])
     access = forms.ChoiceField(label=_("Container Access"),
-                               required=True,
                                choices=ACCESS_CHOICES)
 
     def handle(self, request, data):
@@ -83,7 +81,9 @@ class UploadObject(forms.SelfHandlingForm):
     path = forms.CharField(max_length=255,
                            required=False,
                            widget=forms.HiddenInput)
-
+    object_file = forms.FileField(label=_("File"),
+                                  required=False,
+                                  allow_empty_file=True)
     name = forms.CharField(max_length=255,
                            label=_("Object Name"),
                            help_text=_("Slashes are allowed, and are treated "
@@ -93,9 +93,6 @@ class UploadObject(forms.SelfHandlingForm):
                                attrs={"ng-model": "name",
                                       "not-blank": ""}
                            ))
-    object_file = forms.FileField(label=_("File"),
-                                  required=False,
-                                  allow_empty_file=True)
     container_name = forms.CharField(widget=forms.HiddenInput())
 
     def _set_object_path(self, data):
@@ -120,7 +117,7 @@ class UploadObject(forms.SelfHandlingForm):
                                                 data['container_name'],
                                                 object_path,
                                                 object_file)
-            msg = force_unicode(_("Object was successfully uploaded."))
+            msg = force_text(_("Object was successfully uploaded."))
             messages.success(request, msg)
             return obj
         except Exception:
@@ -189,7 +186,9 @@ class CreatePseudoFolder(forms.SelfHandlingForm):
 class CopyObject(forms.SelfHandlingForm):
     new_container_name = forms.ChoiceField(label=_("Destination container"),
                                            validators=[no_slash_validator])
-    path = forms.CharField(max_length=255, required=False)
+    path = forms.CharField(
+        label=pgettext_lazy("Swift pseudo folder path", u"Path"),
+        max_length=255, required=False)
     new_object_name = forms.CharField(max_length=255,
                                       label=_("Destination object name"),
                                       validators=[no_slash_validator])
@@ -229,11 +228,11 @@ class CopyObject(forms.SelfHandlingForm):
             return True
         except exceptions.HorizonException as exc:
             messages.error(request, exc)
-            raise exceptions.Http302(reverse(index,
-                args=[tables.wrap_delimiter(orig_container)]))
+            raise exceptions.Http302(
+                reverse(index, args=[utils.wrap_delimiter(orig_container)]))
         except Exception:
             redirect = reverse(index,
-                               args=[tables.wrap_delimiter(orig_container)])
+                               args=[utils.wrap_delimiter(orig_container)])
             exceptions.handle(request,
                               _("Unable to copy object."),
                               redirect=redirect)

@@ -1,14 +1,10 @@
 {% extends 'base.html' %}
 {% load i18n %}
-{% block title %}{% trans "Volumes &amp; Snapshots" %}{% endblock %}
-
-{% block page_header %}
-  {% include "horizon/common/_page_header.html" with title=_("Volumes &amp; Snapshots")%}
-{% endblock page_header %}
+{% block title %}{% trans "Volumes" %}{% endblock %}
 
 {% block main %}
-<div class="row-fluid">
-  <div class="span12">
+<div class="row">
+  <div class="col-sm-12">
     {{ tab_group.render }}
   </div>
 </div>

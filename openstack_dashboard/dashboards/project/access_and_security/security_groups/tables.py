@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -17,18 +15,48 @@
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ungettext_lazy
 
 from horizon import tables
 
 from openstack_dashboard import api
+from openstack_dashboard import policy
+from openstack_dashboard.usage import quotas
 from openstack_dashboard.utils import filters
 
 
-class DeleteGroup(tables.DeleteAction):
-    data_type_singular = _("Security Group")
-    data_type_plural = _("Security Groups")
+POLICY_CHECK = getattr(settings, "POLICY_CHECK_FUNCTION",
+                       lambda policy, request, target: True)
+
+
+class DeleteGroup(policy.PolicyTargetMixin, tables.DeleteAction):
+
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Security Group",
+            u"Delete Security Groups",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Security Group",
+            u"Deleted Security Groups",
+            count
+        )
 
     def allowed(self, request, security_group=None):
+        policy_target = self.get_policy_target(request, security_group)
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "delete_security_group"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        if not POLICY_CHECK(policy, request, policy_target):
+            return False
+
         if not security_group:
             return True
         return security_group.name != 'default'
@@ -41,26 +69,72 @@ class CreateGroup(tables.LinkAction):
     name = "create"
     verbose_name = _("Create Security Group")
     url = "horizon:project:access_and_security:security_groups:create"
-    classes = ("ajax-modal", "btn-create")
+    classes = ("ajax-modal",)
+    icon = "plus"
+
+    def allowed(self, request, security_group=None):
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "create_security_group"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        usages = quotas.tenant_quota_usages(request)
+        if usages['security_groups'].get('available', 1) <= 0:
+            if "disabled" not in self.classes:
+                self.classes = [c for c in self.classes] + ["disabled"]
+                self.verbose_name = _("Create Security Group (Quota exceeded)")
+        else:
+            self.verbose_name = _("Create Security Group")
+            self.classes = [c for c in self.classes if c != "disabled"]
+
+        return POLICY_CHECK(policy, request, target={})
 
 
-class EditGroup(tables.LinkAction):
+class EditGroup(policy.PolicyTargetMixin, tables.LinkAction):
     name = "edit"
     verbose_name = _("Edit Security Group")
     url = "horizon:project:access_and_security:security_groups:update"
-    classes = ("ajax-modal", "btn-edit")
+    classes = ("ajax-modal",)
+    icon = "pencil"
 
     def allowed(self, request, security_group=None):
+        policy_target = self.get_policy_target(request, security_group)
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "update_security_group"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        if not POLICY_CHECK(policy, request, policy_target):
+            return False
+
         if not security_group:
             return True
         return security_group.name != 'default'
 
 
-class ManageRules(tables.LinkAction):
+class ManageRules(policy.PolicyTargetMixin, tables.LinkAction):
     name = "manage_rules"
     verbose_name = _("Manage Rules")
     url = "horizon:project:access_and_security:security_groups:detail"
-    classes = ("btn-edit")
+    icon = "pencil"
+
+    def allowed(self, request, security_group=None):
+        policy_target = self.get_policy_target(request, security_group)
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "get_security_group"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        return POLICY_CHECK(policy, request, policy_target)
+
+
+class SecurityGroupsFilterAction(tables.FilterAction):
+
+    def filter(self, table, security_groups, filter_string):
+        """Naive case-insensitive search."""
+        query = filter_string.lower()
+        return [security_group for security_group in security_groups
+                if query in security_group.name.lower()]
 
 
 class SecurityGroupsTable(tables.DataTable):
@@ -70,10 +144,10 @@ class SecurityGroupsTable(tables.DataTable):
     def sanitize_id(self, obj_id):
         return filters.get_int_or_uuid(obj_id)
 
-    class Meta:
+    class Meta(object):
         name = "security_groups"
         verbose_name = _("Security Groups")
-        table_actions = (CreateGroup, DeleteGroup)
+        table_actions = (CreateGroup, DeleteGroup, SecurityGroupsFilterAction)
         row_actions = (ManageRules, EditGroup, DeleteGroup)
 
 
@@ -81,15 +155,45 @@ class CreateRule(tables.LinkAction):
     name = "add_rule"
     verbose_name = _("Add Rule")
     url = "horizon:project:access_and_security:security_groups:add_rule"
-    classes = ("ajax-modal", "btn-create")
+    classes = ("ajax-modal",)
+    icon = "plus"
+
+    def allowed(self, request, security_group_rule=None):
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "create_security_group_rule"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        return POLICY_CHECK(policy, request, target={})
 
     def get_link_url(self):
         return reverse(self.url, args=[self.table.kwargs['security_group_id']])
 
 
 class DeleteRule(tables.DeleteAction):
-    data_type_singular = _("Rule")
-    data_type_plural = _("Rules")
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Rule",
+            u"Delete Rules",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Rule",
+            u"Deleted Rules",
+            count
+        )
+
+    def allowed(self, request, security_group_rule=None):
+        if api.base.is_service_enabled(request, "network"):
+            policy = (("network", "delete_security_group_rule"),)
+        else:
+            policy = (("compute", "compute_extension:security_groups"),)
+
+        return POLICY_CHECK(policy, request, target={})
 
     def delete(self, request, obj_id):
         api.network.security_group_rule_delete(request, obj_id)
@@ -100,20 +204,26 @@ class DeleteRule(tables.DeleteAction):
                        "security_groups:detail", args=[sg_id])
 
 
-def get_remote(rule):
+def get_remote_ip_prefix(rule):
     if 'cidr' in rule.ip_range:
         if rule.ip_range['cidr'] is None:
             range = '::/0' if rule.ethertype == 'IPv6' else '0.0.0.0/0'
         else:
             range = rule.ip_range['cidr']
-        return range + ' (CIDR)'
-    elif 'name' in rule.group:
-        return rule.group['name']
+        return range
     else:
         return None
 
 
+def get_remote_security_group(rule):
+    return rule.group.get('name')
+
+
 def get_port_range(rule):
+    # There is no case where from_port is None and to_port has a value,
+    # so it is enough to check only from_port.
+    if rule.from_port is None:
+        return _('Any')
     ip_proto = rule.ip_protocol
     if rule.from_port == rule.to_port:
         return check_rule_template(rule.from_port, ip_proto)
@@ -160,7 +270,11 @@ class RulesTable(tables.DataTable):
                              filters=(filter_protocol,))
     port_range = tables.Column(get_port_range,
                                verbose_name=_("Port Range"))
-    remote = tables.Column(get_remote, verbose_name=_("Remote"))
+    remote_ip_prefix = tables.Column(get_remote_ip_prefix,
+                                     verbose_name=_("Remote IP Prefix"))
+    remote_security_group = tables.Column(get_remote_security_group,
+                                          verbose_name=_("Remote Security"
+                                                         " Group"))
 
     def sanitize_id(self, obj_id):
         return filters.get_int_or_uuid(obj_id)
@@ -168,7 +282,7 @@ class RulesTable(tables.DataTable):
     def get_object_display(self, rule):
         return unicode(rule)
 
-    class Meta:
+    class Meta(object):
         name = "rules"
         verbose_name = _("Security Group Rules")
         table_actions = (CreateRule, DeleteRule)

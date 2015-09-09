@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -28,10 +26,6 @@ class BasePanels(horizon.PanelGroup):
               'images',
               'access_and_security',)
 
-class RACUsagePanels(horizon.PanelGroup):
-    slug = "rac_usage"
-    name = "RAC Usage"
-    panels = ('rac_usage',)
 
 class NetworkPanels(horizon.PanelGroup):
     slug = "network"
@@ -51,16 +45,32 @@ class ObjectStorePanels(horizon.PanelGroup):
 
 
 class OrchestrationPanels(horizon.PanelGroup):
-    name = _("Orchestration")
     slug = "orchestration"
-    panels = ('stacks',)
+    name = _("Orchestration")
+    panels = ('stacks',
+              'stacks.resource_types',)
 
 
 class DatabasePanels(horizon.PanelGroup):
-    name = _("Databases")
     slug = "database"
+    name = _("Database")
     panels = ('databases',
               'database_backups',)
+
+
+class DataProcessingPanels(horizon.PanelGroup):
+    slug = "data_processing"
+    name = _("Data Processing")
+    panels = ('data_processing.wizard',
+              'data_processing.clusters',
+              'data_processing.job_executions',
+              'data_processing.cluster_templates',
+              'data_processing.nodegroup_templates',
+              'data_processing.jobs',
+              'data_processing.job_binaries',
+              'data_processing.data_sources',
+              'data_processing.data_image_registry',
+              'data_processing.data_plugins',)
 
 
 class Project(horizon.Dashboard):
@@ -71,10 +81,9 @@ class Project(horizon.Dashboard):
         NetworkPanels,
         ObjectStorePanels,
         OrchestrationPanels,
-        RACUsagePanels,
-        DatabasePanels,)
+        DatabasePanels,
+        DataProcessingPanels,)
     default_panel = 'overview'
-    supports_tenants = True
 
 
 horizon.register(Project)

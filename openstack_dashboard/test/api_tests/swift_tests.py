@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -39,7 +37,7 @@ class SwiftApiTests(test.APITestCase):
         self.mox.ReplayAll()
 
         (conts, more) = api.swift.swift_get_containers(self.request)
-        self.assertEqual(len(conts), len(containers))
+        self.assertEqual(len(containers), len(conts))
         self.assertFalse(more)
 
     def test_swift_get_container_with_data(self):
@@ -51,8 +49,8 @@ class SwiftApiTests(test.APITestCase):
         self.mox.ReplayAll()
 
         cont = api.swift.swift_get_container(self.request, container.name)
-        self.assertEqual(cont.name, container.name)
-        self.assertEqual(len(cont.data), len(objects))
+        self.assertEqual(container.name, cont.name)
+        self.assertEqual(len(objects), len(cont.data))
 
     def test_swift_get_container_without_data(self):
         container = self.containers.first()
@@ -70,7 +68,7 @@ class SwiftApiTests(test.APITestCase):
         metadata = {'is_public': False}
         container = self.containers.first()
         headers = api.swift._metadata_to_header(metadata=(metadata))
-        swift_api = self.stub_swiftclient(expected_calls=2)
+        swift_api = self.stub_swiftclient()
         # Check for existence, then create
         exc = self.exceptions.swift
         swift_api.head_container(container.name).AndRaise(exc)
@@ -122,23 +120,38 @@ class SwiftApiTests(test.APITestCase):
 
         (objs, more) = api.swift.swift_get_objects(self.request,
                                                    container.name)
-        self.assertEqual(len(objs), len(objects))
+        self.assertEqual(len(objects), len(objs))
         self.assertFalse(more)
 
-    def test_swift_get_object_with_data(self):
+    def test_swift_get_object_with_data_non_chunked(self):
         container = self.containers.first()
         object = self.objects.first()
 
         swift_api = self.stub_swiftclient()
-        swift_api.get_object(container.name, object.name) \
-            .AndReturn([object, object.data])
+        swift_api.get_object(
+            container.name, object.name, resp_chunk_size=None
+        ).AndReturn([object, object.data])
 
         self.mox.ReplayAll()
 
-        obj = api.swift.swift_get_object(self.request,
-                                         container.name,
-                                         object.name)
-        self.assertEqual(obj.name, object.name)
+        obj = api.swift.swift_get_object(self.request, container.name,
+                                         object.name, resp_chunk_size=None)
+        self.assertEqual(object.name, obj.name)
+
+    def test_swift_get_object_with_data_chunked(self):
+        container = self.containers.first()
+        object = self.objects.first()
+
+        swift_api = self.stub_swiftclient()
+        swift_api.get_object(
+            container.name, object.name, resp_chunk_size=api.swift.CHUNK_SIZE
+        ).AndReturn([object, object.data])
+
+        self.mox.ReplayAll()
+
+        obj = api.swift.swift_get_object(
+            self.request, container.name, object.name)
+        self.assertEqual(object.name, obj.name)
 
     def test_swift_get_object_without_data(self):
         container = self.containers.first()
@@ -154,7 +167,7 @@ class SwiftApiTests(test.APITestCase):
                                          container.name,
                                          object.name,
                                          with_data=False)
-        self.assertEqual(obj.name, object.name)
+        self.assertEqual(object.name, obj.name)
         self.assertIsNone(obj.data)
 
     def test_swift_upload_object(self):
@@ -203,7 +216,7 @@ class SwiftApiTests(test.APITestCase):
         container = self.containers.first()
         obj = self.objects.first()
 
-        swift_api = self.stub_swiftclient(expected_calls=2)
+        swift_api = self.stub_swiftclient()
         swift_api.head_object(container.name, obj.name).AndReturn(container)
 
         exc = self.exceptions.swift

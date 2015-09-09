@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,14 +13,23 @@
 import json
 import logging
 
+from django.utils import html
 from django.utils.translation import ugettext_lazy as _
 from django.views.decorators.debug import sensitive_variables  # noqa
+
+from oslo_utils import strutils
+import six
 
 from horizon import exceptions
 from horizon import forms
 from horizon import messages
 
 from openstack_dashboard import api
+from openstack_dashboard.dashboards.project.images \
+    import utils as image_utils
+from openstack_dashboard.dashboards.project.instances \
+    import utils as instance_utils
+
 
 LOG = logging.getLogger(__name__)
 
@@ -46,17 +53,18 @@ def create_upload_form_attributes(prefix, input_type, name):
 
 class TemplateForm(forms.SelfHandlingForm):
 
-    class Meta:
+    class Meta(object):
         name = _('Select Template')
-        help_text = _('From here you can select a template to launch '
-                      'a stack.')
+        help_text = _('Select a template to launch a stack.')
 
-    choices = [('url', _('URL')),
-               ('file', _('File')),
-               ('raw', _('Direct Input'))]
+    # TODO(jomara) - update URL choice for template & environment files
+    # w/ client side download when applicable
+    base_choices = [('file', _('File')),
+                    ('raw', _('Direct Input'))]
+    url_choice = [('url', _('URL'))]
     attributes = {'class': 'switchable', 'data-slug': 'templatesource'}
     template_source = forms.ChoiceField(label=_('Template Source'),
-                                        choices=choices,
+                                        choices=base_choices + url_choice,
                                         widget=forms.Select(attrs=attributes))
 
     attributes = create_upload_form_attributes(
@@ -92,7 +100,7 @@ class TemplateForm(forms.SelfHandlingForm):
     attributes = {'data-slug': 'envsource', 'class': 'switchable'}
     environment_source = forms.ChoiceField(
         label=_('Environment Source'),
-        choices=choices,
+        choices=base_choices,
         widget=forms.Select(attrs=attributes),
         required=False)
 
@@ -104,16 +112,6 @@ class TemplateForm(forms.SelfHandlingForm):
         label=_('Environment File'),
         help_text=_('A local environment to upload.'),
         widget=forms.FileInput(attrs=attributes),
-        required=False)
-
-    attributes = create_upload_form_attributes(
-        'env',
-        'url',
-        _('Environment URL'))
-    environment_url = forms.URLField(
-        label=_('Environment URL'),
-        help_text=_('An external (HTTP) URL to load the environment from.'),
-        widget=forms.TextInput(attrs=attributes),
         required=False)
 
     attributes = create_upload_form_attributes(
@@ -135,10 +133,8 @@ class TemplateForm(forms.SelfHandlingForm):
 
         files = self.request.FILES
         self.clean_uploaded_files('template', _('template'), cleaned, files)
-        self.clean_uploaded_files('environment',
-            _('environment'),
-            cleaned,
-            files)
+        self.clean_uploaded_files('environment', _('environment'), cleaned,
+                                  files)
 
         # Validate the template and get back the params.
         kwargs = {}
@@ -146,6 +142,9 @@ class TemplateForm(forms.SelfHandlingForm):
             kwargs['template'] = cleaned['template_data']
         else:
             kwargs['template_url'] = cleaned['template_url']
+
+        if cleaned['environment_data']:
+            kwargs['environment'] = cleaned['environment_data']
 
         try:
             validated = api.heat.template_validate(self.request, **kwargs)
@@ -210,7 +209,6 @@ class TemplateForm(forms.SelfHandlingForm):
     def create_kwargs(self, data):
         kwargs = {'parameters': data['template_validate'],
                   'environment_data': data['environment_data'],
-                  'environment_url': data['environment_url'],
                   'template_data': data['template_data'],
                   'template_url': data['template_url']}
         if data.get('stack_id'):
@@ -228,24 +226,27 @@ class TemplateForm(forms.SelfHandlingForm):
 
 
 class ChangeTemplateForm(TemplateForm):
-    class Meta:
+    class Meta(object):
         name = _('Edit Template')
-        help_text = _('From here you can select a new template to re-launch '
-                      'a stack.')
+        help_text = _('Select a new template to re-launch a stack.')
     stack_id = forms.CharField(label=_('Stack ID'),
-        widget=forms.widgets.HiddenInput,
-        required=True)
+                               widget=forms.widgets.HiddenInput)
     stack_name = forms.CharField(label=_('Stack Name'),
-        widget=forms.TextInput(
-            attrs={'readonly': 'readonly'}
-        ))
+                                 widget=forms.TextInput(attrs={'readonly':
+                                                               'readonly'}))
+
+
+class PreviewTemplateForm(TemplateForm):
+    class Meta(object):
+        name = _('Preview Template')
+        help_text = _('Select a new template to preview a stack.')
 
 
 class CreateStackForm(forms.SelfHandlingForm):
 
     param_prefix = '__param_'
 
-    class Meta:
+    class Meta(object):
         name = _('Create Stack')
 
     template_data = forms.CharField(
@@ -257,26 +258,21 @@ class CreateStackForm(forms.SelfHandlingForm):
     environment_data = forms.CharField(
         widget=forms.widgets.HiddenInput,
         required=False)
-    environment_url = forms.CharField(
-        widget=forms.widgets.HiddenInput,
-        required=False)
     parameters = forms.CharField(
-        widget=forms.widgets.HiddenInput,
-        required=True)
+        widget=forms.widgets.HiddenInput)
     stack_name = forms.RegexField(
-        max_length='255',
+        max_length=255,
         label=_('Stack Name'),
         help_text=_('Name of the stack to create.'),
         regex=r"^[a-zA-Z][a-zA-Z0-9_.-]*$",
-        error_messages={'invalid': _('Name must start with a letter and may '
-                            'only contain letters, numbers, underscores, '
-                            'periods and hyphens.')},
-        required=True)
+        error_messages={'invalid':
+                        _('Name must start with a letter and may '
+                          'only contain letters, numbers, underscores, '
+                          'periods and hyphens.')})
     timeout_mins = forms.IntegerField(
         initial=60,
         label=_('Creation Timeout (minutes)'),
-        help_text=_('Stack creation timeout in minutes.'),
-        required=True)
+        help_text=_('Stack creation timeout in minutes.'))
     enable_rollback = forms.BooleanField(
         label=_('Rollback On Failure'),
         help_text=_('Enable rollback on create/update failure.'),
@@ -295,35 +291,55 @@ class CreateStackForm(forms.SelfHandlingForm):
             label=_('Password for user "%s"') % self.request.user.username,
             help_text=_('This is required for operations to be performed '
                         'throughout the lifecycle of the stack'),
-            required=True,
             widget=forms.PasswordInput())
 
         self.help_text = template_validate['Description']
 
         params = template_validate.get('Parameters', {})
-
-        for param_key, param in params.items():
+        if template_validate.get('ParameterGroups'):
+            params_in_order = []
+            for group in template_validate['ParameterGroups']:
+                for param in group.get('parameters', []):
+                    if param in params:
+                        params_in_order.append((param, params[param]))
+        else:
+            # no parameter groups, simply sorted to make the order fixed
+            params_in_order = sorted(params.items())
+        for param_key, param in params_in_order:
+            field = None
             field_key = self.param_prefix + param_key
             field_args = {
                 'initial': param.get('Default', None),
-                'label': param_key,
-                'help_text': param.get('Description', ''),
+                'label': param.get('Label', param_key),
+                'help_text': html.escape(param.get('Description', '')),
                 'required': param.get('Default', None) is None
             }
 
             param_type = param.get('Type', None)
+            hidden = strutils.bool_from_string(param.get('NoEcho', 'false'))
+            if 'CustomConstraint' in param:
+                choices = self._populate_custom_choices(
+                    param['CustomConstraint'])
+                field_args['choices'] = choices
+                field = forms.ChoiceField(**field_args)
 
-            if 'AllowedValues' in param:
+            elif 'AllowedValues' in param:
                 choices = map(lambda x: (x, x), param['AllowedValues'])
                 field_args['choices'] = choices
                 field = forms.ChoiceField(**field_args)
 
-            elif param_type in ('CommaDelimitedList', 'String'):
+            elif param_type == 'Json' and 'Default' in param:
+                field_args['initial'] = json.dumps(param['Default'])
+                field = forms.CharField(**field_args)
+
+            elif param_type in ('CommaDelimitedList', 'String', 'Json'):
                 if 'MinLength' in param:
                     field_args['min_length'] = int(param['MinLength'])
                     field_args['required'] = param.get('MinLength', 0) > 0
                 if 'MaxLength' in param:
                     field_args['max_length'] = int(param['MaxLength'])
+                if hidden:
+                    field_args['widget'] = forms.PasswordInput()
                 field = forms.CharField(**field_args)
 
             elif param_type == 'Number':
@@ -333,12 +349,19 @@ class CreateStackForm(forms.SelfHandlingForm):
                     field_args['max_value'] = int(param['MaxValue'])
                 field = forms.IntegerField(**field_args)
 
-            self.fields[field_key] = field
+            # heat-api currently returns the boolean type in lowercase
+            # (see https://bugs.launchpad.net/heat/+bug/1361448)
+            # so for better compatibility both are checked here
+            elif param_type in ('Boolean', 'boolean'):
+                field = forms.BooleanField(**field_args)
+
+            if field:
+                self.fields[field_key] = field
 
     @sensitive_variables('password')
     def handle(self, request, data):
         prefix_length = len(self.param_prefix)
-        params_list = [(k[prefix_length:], v) for (k, v) in data.iteritems()
+        params_list = [(k[prefix_length:], v) for (k, v) in six.iteritems(data)
                        if k.startswith(self.param_prefix)]
         fields = {
             'stack_name': data.get('stack_name'),
@@ -355,8 +378,6 @@ class CreateStackForm(forms.SelfHandlingForm):
 
         if data.get('environment_data'):
             fields['environment'] = data.get('environment_data')
-        elif data.get('environment_url'):
-            fields['environment_url'] = data.get('environment_url')
 
         try:
             api.heat.stack_create(self.request, **fields)
@@ -365,24 +386,34 @@ class CreateStackForm(forms.SelfHandlingForm):
         except Exception:
             exceptions.handle(request)
 
+    def _populate_custom_choices(self, custom_type):
+        if custom_type == 'neutron.network':
+            return instance_utils.network_field_data(self.request, True)
+        if custom_type == 'nova.keypair':
+            return instance_utils.keypair_field_data(self.request, True)
+        if custom_type == 'glance.image':
+            return image_utils.image_field_data(self.request, True)
+        if custom_type == 'nova.flavor':
+            return instance_utils.flavor_field_data(self.request, True)
+        return []
+
 
 class EditStackForm(CreateStackForm):
 
-    class Meta:
+    class Meta(object):
         name = _('Update Stack Parameters')
 
-    stack_id = forms.CharField(label=_('Stack ID'),
-        widget=forms.widgets.HiddenInput,
-        required=True)
-    stack_name = forms.CharField(label=_('Stack Name'),
-        widget=forms.TextInput(
-            attrs={'readonly': 'readonly'}
-        ))
+    stack_id = forms.CharField(
+        label=_('Stack ID'),
+        widget=forms.widgets.HiddenInput)
+    stack_name = forms.CharField(
+        label=_('Stack Name'),
+        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
 
     @sensitive_variables('password')
     def handle(self, request, data):
         prefix_length = len(self.param_prefix)
-        params_list = [(k[prefix_length:], v) for (k, v) in data.iteritems()
+        params_list = [(k[prefix_length:], v) for (k, v) in six.iteritems(data)
                        if k.startswith(self.param_prefix)]
 
         stack_id = data.get('stack_id')
@@ -407,5 +438,42 @@ class EditStackForm(CreateStackForm):
             api.heat.stack_update(self.request, stack_id=stack_id, **fields)
             messages.success(request, _("Stack update started."))
             return True
+        except Exception:
+            exceptions.handle(request)
+
+
+class PreviewStackForm(CreateStackForm):
+
+    class Meta(object):
+        name = _('Preview Stack Parameters')
+
+    def __init__(self, *args, **kwargs):
+        self.next_view = kwargs.pop('next_view')
+        super(CreateStackForm, self).__init__(*args, **kwargs)
+
+    def handle(self, request, data):
+        prefix_length = len(self.param_prefix)
+        params_list = [(k[prefix_length:], v) for (k, v) in six.iteritems(data)
+                       if k.startswith(self.param_prefix)]
+        fields = {
+            'stack_name': data.get('stack_name'),
+            'timeout_mins': data.get('timeout_mins'),
+            'disable_rollback': not(data.get('enable_rollback')),
+            'parameters': dict(params_list),
+        }
+
+        if data.get('template_data'):
+            fields['template'] = data.get('template_data')
+        else:
+            fields['template_url'] = data.get('template_url')
+
+        if data.get('environment_data'):
+            fields['environment'] = data.get('environment_data')
+
+        try:
+            stack_preview = api.heat.stack_preview(self.request, **fields)
+            request.method = 'GET'
+            return self.next_view.as_view()(request,
+                                            stack_preview=stack_preview)
         except Exception:
             exceptions.handle(request)

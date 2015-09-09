@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -32,7 +30,7 @@ from openstack_dashboard import usage
 
 class GlobalUsageCsvRenderer(csvbase.BaseCsvResponse):
 
-    columns = [_("Project Name"), _("VCPUs"), _("Ram (MB)"),
+    columns = [_("Project Name"), _("VCPUs"), _("RAM (MB)"),
                _("Disk (GB)"), _("Usage (Hours)")]
 
     def get_row_data(self):

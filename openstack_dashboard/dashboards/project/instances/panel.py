@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -24,6 +22,7 @@ from openstack_dashboard.dashboards.project import dashboard
 class Instances(horizon.Panel):
     name = _("Instances")
     slug = 'instances'
+    permissions = ('openstack.services.compute',)
 
 
 dashboard.Project.register(Instances)

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2011 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -29,6 +27,7 @@ from openstack_dashboard.usage import quotas
 
 
 INDEX_URL = reverse('horizon:project:volumes:index')
+VOLUME_SNAPSHOTS_TAB_URL = reverse('horizon:project:volumes:snapshots_tab')
 
 
 class VolumeSnapshotsViewTests(test.TestCase):
@@ -38,10 +37,11 @@ class VolumeSnapshotsViewTests(test.TestCase):
         volume = self.cinder_volumes.first()
         cinder.volume_get(IsA(http.HttpRequest), volume.id) \
             .AndReturn(volume)
+        snapshot_used = len(self.cinder_volume_snapshots.list())
         usage_limit = {'maxTotalVolumeGigabytes': 250,
                        'gigabytesUsed': 20,
-                       'volumesUsed': len(self.cinder_volumes.list()),
-                       'maxTotalVolumes': 6}
+                       'snapshotsUsed': snapshot_used,
+                       'maxTotalSnapshots': 6}
         quotas.tenant_limit_usages(IsA(http.HttpRequest)).\
             AndReturn(usage_limit)
         self.mox.ReplayAll()
@@ -77,7 +77,7 @@ class VolumeSnapshotsViewTests(test.TestCase):
         url = reverse('horizon:project:volumes:volumes:create_snapshot',
                       args=[volume.id])
         res = self.client.post(url, formData)
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, VOLUME_SNAPSHOTS_TAB_URL)
 
     @test.create_stubs({cinder: ('volume_get',
                                  'volume_snapshot_create',)})
@@ -103,39 +103,34 @@ class VolumeSnapshotsViewTests(test.TestCase):
         url = reverse('horizon:project:volumes:volumes:create_snapshot',
                       args=[volume.id])
         res = self.client.post(url, formData)
-        self.assertRedirectsNoFollow(res, INDEX_URL)
+        self.assertRedirectsNoFollow(res, VOLUME_SNAPSHOTS_TAB_URL)
 
-    @test.create_stubs({api.nova: ('server_list',),
-                        api.cinder: ('volume_snapshot_list',
+    @test.create_stubs({api.cinder: ('volume_snapshot_list',
                                      'volume_list',
-                                     'volume_snapshot_delete'),
-                        quotas: ('tenant_quota_usages',)})
+                                     'volume_backup_supported',
+                                     'volume_snapshot_delete')})
     def test_delete_volume_snapshot(self):
         vol_snapshots = self.cinder_volume_snapshots.list()
         volumes = self.cinder_volumes.list()
         snapshot = self.cinder_volume_snapshots.first()
 
+        api.cinder.volume_backup_supported(IsA(http.HttpRequest)). \
+            MultipleTimes().AndReturn(True)
         api.cinder.volume_snapshot_list(IsA(http.HttpRequest)). \
             AndReturn(vol_snapshots)
         api.cinder.volume_list(IsA(http.HttpRequest)). \
             AndReturn(volumes)
 
         api.cinder.volume_snapshot_delete(IsA(http.HttpRequest), snapshot.id)
-        api.cinder.volume_list(IsA(http.HttpRequest), search_opts=None). \
-            AndReturn(volumes)
-        api.nova.server_list(IsA(http.HttpRequest), search_opts=None). \
-            AndReturn([self.servers.list(), False])
         api.cinder.volume_snapshot_list(IsA(http.HttpRequest)). \
             AndReturn([])
         api.cinder.volume_list(IsA(http.HttpRequest)). \
             AndReturn(volumes)
-        quotas.tenant_quota_usages(IsA(http.HttpRequest)).MultipleTimes(). \
-            AndReturn(self.quota_usages.first())
         self.mox.ReplayAll()
 
         formData = {'action':
                     'volume_snapshots__delete__%s' % snapshot.id}
-        res = self.client.post(INDEX_URL, formData, follow=True)
+        res = self.client.post(VOLUME_SNAPSHOTS_TAB_URL, formData, follow=True)
 
         self.assertIn("Scheduled deletion of Volume Snapshot: test snapshot",
                       [m.message for m in res.context['messages']])
@@ -152,12 +147,12 @@ class VolumeSnapshotsViewTests(test.TestCase):
 
         self.mox.ReplayAll()
 
-        url = reverse('horizon:project:volumes:detail',
+        url = reverse('horizon:project:volumes:snapshots:detail',
                       args=[snapshot.id])
         res = self.client.get(url)
 
         self.assertContains(res,
-                            "<h2>Volume Snapshot Details: %s</h2>" %
+                            "<h1>Volume Snapshot Details: %s</h1>" %
                             snapshot.name,
                             1, 200)
         self.assertContains(res, "<dd>test snapshot</dd>", 1, 200)
@@ -173,7 +168,7 @@ class VolumeSnapshotsViewTests(test.TestCase):
             AndRaise(self.exceptions.cinder)
         self.mox.ReplayAll()
 
-        url = reverse('horizon:project:volumes:detail',
+        url = reverse('horizon:project:volumes:snapshots:detail',
                       args=[snapshot.id])
         res = self.client.get(url)
 
@@ -192,8 +187,30 @@ class VolumeSnapshotsViewTests(test.TestCase):
 
         self.mox.ReplayAll()
 
-        url = reverse('horizon:project:volumes:detail',
+        url = reverse('horizon:project:volumes:snapshots:detail',
                       args=[snapshot.id])
         res = self.client.get(url)
 
+        self.assertRedirectsNoFollow(res, INDEX_URL)
+
+    @test.create_stubs({cinder: ('volume_snapshot_update',
+                                 'volume_snapshot_get')})
+    def test_update_snapshot(self):
+        snapshot = self.cinder_volume_snapshots.first()
+
+        cinder.volume_snapshot_get(IsA(http.HttpRequest), snapshot.id) \
+            .AndReturn(snapshot)
+        cinder.volume_snapshot_update(IsA(http.HttpRequest),
+                                      snapshot.id,
+                                      snapshot.name,
+                                      snapshot.description) \
+            .AndReturn(snapshot)
+        self.mox.ReplayAll()
+
+        formData = {'method': 'UpdateSnapshotForm',
+                    'name': snapshot.name,
+                    'description': snapshot.description}
+        url = reverse(('horizon:project:volumes:snapshots:update'),
+                      args=[snapshot.id])
+        res = self.client.post(url, formData)
         self.assertRedirectsNoFollow(res, INDEX_URL)

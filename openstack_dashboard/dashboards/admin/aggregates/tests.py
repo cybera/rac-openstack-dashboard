@@ -10,6 +10,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
+
+import mock
 
 from django.core.urlresolvers import reverse
 from django import http
@@ -69,34 +72,49 @@ class CreateAggregateWorkflowTests(BaseAggregateWorkflowTests):
 
         self.assertTemplateUsed(res, constants.AGGREGATES_CREATE_VIEW_TEMPLATE)
         self.assertEqual(workflow.name, workflows.CreateAggregateWorkflow.name)
-        self.assertQuerysetEqual(workflow.steps,
-                        ['<SetAggregateInfoStep: set_aggregate_info>',
-                        '<AddHostsToAggregateStep: add_host_to_aggregate>'])
+        self.assertQuerysetEqual(
+            workflow.steps,
+            ['<SetAggregateInfoStep: set_aggregate_info>',
+             '<AddHostsToAggregateStep: add_host_to_aggregate>'])
 
     @test.create_stubs({api.nova: ('host_list', 'aggregate_details_list',
                                    'aggregate_create'), })
-    def test_create_aggregate(self):
-
-        aggregate = self.aggregates.first()
-
+    def _test_generic_create_aggregate(self, workflow_data, aggregate,
+                                       error_count=0,
+                                       expected_error_message=None):
         api.nova.host_list(IsA(http.HttpRequest)).AndReturn(self.hosts.list())
         api.nova.aggregate_details_list(IsA(http.HttpRequest)).AndReturn([])
-
-        workflow_data = self._get_create_workflow_data(aggregate)
-        api.nova.aggregate_create(IsA(http.HttpRequest),
-                                  name=workflow_data['name'],
-                                  availability_zone=
-                                  workflow_data['availability_zone'])\
-            .AndReturn(aggregate)
+        if not expected_error_message:
+            api.nova.aggregate_create(
+                IsA(http.HttpRequest),
+                name=workflow_data['name'],
+                availability_zone=workflow_data['availability_zone'],
+            ).AndReturn(aggregate)
 
         self.mox.ReplayAll()
 
         url = reverse(constants.AGGREGATES_CREATE_URL)
         res = self.client.post(url, workflow_data)
 
-        self.assertNoFormErrors(res)
-        self.assertRedirectsNoFollow(res,
-                                     reverse(constants.AGGREGATES_INDEX_URL))
+        if not expected_error_message:
+            self.assertNoFormErrors(res)
+            self.assertRedirectsNoFollow(
+                res, reverse(constants.AGGREGATES_INDEX_URL))
+        else:
+            self.assertFormErrors(res, error_count, expected_error_message)
+
+    def test_create_aggregate(self):
+        aggregate = self.aggregates.first()
+        workflow_data = self._get_create_workflow_data(aggregate)
+        self._test_generic_create_aggregate(workflow_data, aggregate)
+
+    def test_create_aggregate_fails_missing_fields(self):
+        aggregate = self.aggregates.first()
+        workflow_data = self._get_create_workflow_data(aggregate)
+        workflow_data['name'] = ''
+        workflow_data['availability_zone'] = ''
+        self._test_generic_create_aggregate(workflow_data, aggregate, 2,
+                                            u'This field is required')
 
     @test.create_stubs({api.nova: ('host_list',
                                    'aggregate_details_list',
@@ -110,11 +128,11 @@ class CreateAggregateWorkflowTests(BaseAggregateWorkflowTests):
         api.nova.aggregate_details_list(IsA(http.HttpRequest)).AndReturn([])
 
         workflow_data = self._get_create_workflow_data(aggregate, hosts)
-        api.nova.aggregate_create(IsA(http.HttpRequest),
-                                  name=workflow_data['name'],
-                                  availability_zone=
-                                  workflow_data['availability_zone'])\
-            .AndReturn(aggregate)
+        api.nova.aggregate_create(
+            IsA(http.HttpRequest),
+            name=workflow_data['name'],
+            availability_zone=workflow_data['availability_zone'],
+        ).AndReturn(aggregate)
 
         compute_hosts = []
         for host in hosts:
@@ -122,8 +140,9 @@ class CreateAggregateWorkflowTests(BaseAggregateWorkflowTests):
                 compute_hosts.append(host)
 
         for host in compute_hosts:
-            api.nova.add_host_to_aggregate(IsA(http.HttpRequest),
-                                           aggregate.id, host.host_name)
+            api.nova.add_host_to_aggregate(
+                IsA(http.HttpRequest),
+                aggregate.id, host.host_name).InAnyOrder()
 
         self.mox.ReplayAll()
 
@@ -159,8 +178,22 @@ class CreateAggregateWorkflowTests(BaseAggregateWorkflowTests):
 
 class AggregatesViewTests(test.BaseAdminViewTests):
 
+    @mock.patch('openstack_dashboard.api.nova.extension_supported',
+                mock.Mock(return_value=False))
     @test.create_stubs({api.nova: ('aggregate_details_list',
-                                   'availability_zone_list',), })
+                                   'availability_zone_list',),
+                        api.cinder: ('tenant_absolute_limits',)})
+    def test_panel_not_available(self):
+        api.cinder.tenant_absolute_limits(IsA(http.HttpRequest)). \
+            MultipleTimes().AndReturn(self.cinder_limits['absolute'])
+        self.mox.ReplayAll()
+
+        self.patchers['aggregates'].stop()
+        res = self.client.get(reverse('horizon:admin:overview:index'))
+        self.assertNotIn('Host Aggregates', res.content)
+
+    @test.create_stubs({api.nova: ('aggregate_details_list',
+                                   'availability_zone_list',)})
     def test_index(self):
         api.nova.aggregate_details_list(IsA(http.HttpRequest)) \
                 .AndReturn(self.aggregates.list())
@@ -195,8 +228,8 @@ class AggregatesViewTests(test.BaseAdminViewTests):
 
         if not expected_error_message:
             self.assertNoFormErrors(res)
-            self.assertRedirectsNoFollow(res,
-                    reverse(constants.AGGREGATES_INDEX_URL))
+            self.assertRedirectsNoFollow(
+                res, reverse(constants.AGGREGATES_INDEX_URL))
         else:
             self.assertFormErrors(res, error_count, expected_error_message)
 
@@ -212,7 +245,7 @@ class AggregatesViewTests(test.BaseAdminViewTests):
         aggregate = self.aggregates.first()
         form_data = {'id': aggregate.id}
 
-        self._test_generic_update_aggregate(form_data, aggregate, 1,
+        self._test_generic_update_aggregate(form_data, aggregate, 2,
                                             u'This field is required')
 
 
@@ -246,10 +279,10 @@ class ManageHostsTests(test.BaseAdminViewTests):
 
         api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                             str(aggregate.id),
-                                            'host2')
+                                            'host2').InAnyOrder()
         api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                             str(aggregate.id),
-                                            'host1')
+                                            'host1').InAnyOrder()
         api.nova.aggregate_get(IsA(http.HttpRequest), str(aggregate.id)) \
                 .AndReturn(aggregate)
         api.nova.host_list(IsA(http.HttpRequest)) \
@@ -279,14 +312,14 @@ class ManageHostsTests(test.BaseAdminViewTests):
                      [host1.host_name, host3.host_name]}
 
         api.nova.aggregate_get(IsA(http.HttpRequest), str(aggregate.id)) \
-                .AndReturn(aggregate)
+                .InAnyOrder().AndReturn(aggregate)
         api.nova.host_list(IsA(http.HttpRequest)) \
-                .AndReturn(self.hosts.list())
+                .InAnyOrder().AndReturn(self.hosts.list())
         api.nova.aggregate_get(IsA(http.HttpRequest), str(aggregate.id)) \
-                .AndReturn(aggregate)
+                .InAnyOrder().AndReturn(aggregate)
         api.nova.add_host_to_aggregate(IsA(http.HttpRequest),
-                                       str(aggregate.id), host3.host_name)\
-                .AndRaise(self.exceptions.nova)
+                                       str(aggregate.id), host3.host_name) \
+                .InAnyOrder().AndRaise(self.exceptions.nova)
         self.mox.ReplayAll()
 
         res = self.client.post(reverse(constants.AGGREGATES_MANAGE_HOSTS_URL,
@@ -302,13 +335,10 @@ class ManageHostsTests(test.BaseAdminViewTests):
                                    'host_list')})
     def test_manage_hosts_update_clean_not_empty_aggregate_should_fail(self):
         aggregate = self.aggregates.first()
-        aggregate.hosts = ['host1', 'host2', 'host3']
+        aggregate.hosts = ['host2']
         form_data = {'manageaggregatehostsaction_role_member':
                      []}
 
-        api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
-                                            str(aggregate.id),
-                                            'host3')
         api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                             str(aggregate.id),
                                             'host2')\
@@ -341,13 +371,13 @@ class ManageHostsTests(test.BaseAdminViewTests):
         if cleanAggregates:
             api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                                 str(aggregate.id),
-                                                'host3')
+                                                'host3').InAnyOrder()
             api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                                 str(aggregate.id),
-                                                'host2')
+                                                'host2').InAnyOrder()
             api.nova.remove_host_from_aggregate(IsA(http.HttpRequest),
                                                 str(aggregate.id),
-                                                'host1')
+                                                'host1').InAnyOrder()
         api.nova.aggregate_get(IsA(http.HttpRequest), str(aggregate.id)) \
                 .AndReturn(aggregate)
         api.nova.host_list(IsA(http.HttpRequest)) \
@@ -374,9 +404,9 @@ class ManageHostsTests(test.BaseAdminViewTests):
         form_data = {'manageaggregatehostsaction_role_member':
                      [host.host_name]}
         self._test_manage_hosts_update(host,
-                                         aggregate,
-                                         form_data,
-                                         addAggregate=False)
+                                       aggregate,
+                                       form_data,
+                                       addAggregate=False)
 
     def test_manage_hosts_update_nothing_empty_aggregate(self):
         aggregate = self.aggregates.first()
@@ -384,9 +414,9 @@ class ManageHostsTests(test.BaseAdminViewTests):
         form_data = {'manageaggregatehostsaction_role_member':
                      []}
         self._test_manage_hosts_update(None,
-                                         aggregate,
-                                         form_data,
-                                         addAggregate=False)
+                                       aggregate,
+                                       form_data,
+                                       addAggregate=False)
 
     def test_manage_hosts_update_add_empty_aggregate(self):
         aggregate = self.aggregates.first()
@@ -395,9 +425,9 @@ class ManageHostsTests(test.BaseAdminViewTests):
         form_data = {'manageaggregatehostsaction_role_member':
                      [host.host_name]}
         self._test_manage_hosts_update(host,
-                                         aggregate,
-                                         form_data,
-                                         addAggregate=True)
+                                       aggregate,
+                                       form_data,
+                                       addAggregate=True)
 
     def test_manage_hosts_update_add_not_empty_aggregate(self):
         aggregate = self.aggregates.first()
@@ -407,9 +437,9 @@ class ManageHostsTests(test.BaseAdminViewTests):
         form_data = {'manageaggregatehostsaction_role_member':
                      [host1.host_name, host3.host_name]}
         self._test_manage_hosts_update(host3,
-                                         aggregate,
-                                         form_data,
-                                         addAggregate=True)
+                                       aggregate,
+                                       form_data,
+                                       addAggregate=True)
 
     def test_manage_hosts_update_clean_not_empty_aggregate(self):
         aggregate = self.aggregates.first()
@@ -417,7 +447,86 @@ class ManageHostsTests(test.BaseAdminViewTests):
         form_data = {'manageaggregatehostsaction_role_member':
                      []}
         self._test_manage_hosts_update(None,
-                                         aggregate,
-                                         form_data,
-                                         addAggregate=False,
-                                         cleanAggregates=True)
+                                       aggregate,
+                                       form_data,
+                                       addAggregate=False,
+                                       cleanAggregates=True)
+
+
+class HostAggregateMetadataTests(test.BaseAdminViewTests):
+
+    @test.create_stubs({api.nova: ('aggregate_get',),
+                        api.glance: ('metadefs_namespace_list',
+                                     'metadefs_namespace_get')})
+    def test_host_aggregate_metadata_get(self):
+        aggregate = self.aggregates.first()
+        api.nova.aggregate_get(
+            IsA(http.HttpRequest),
+            str(aggregate.id)
+        ).AndReturn(aggregate)
+
+        namespaces = self.metadata_defs.list()
+
+        api.glance.metadefs_namespace_list(
+            IsA(http.HttpRequest),
+            filters={'resource_types': ['OS::Nova::Aggregate']}
+        ).AndReturn((namespaces, False, False))
+
+        for namespace in namespaces:
+            api.glance.metadefs_namespace_get(
+                IsA(http.HttpRequest),
+                namespace.namespace,
+                'OS::Nova::Aggregate'
+            ).AndReturn(namespace)
+
+        self.mox.ReplayAll()
+
+        res = self.client.get(
+            reverse(constants.AGGREGATES_UPDATE_METADATA_URL,
+                    args=[aggregate.id]))
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTemplateUsed(
+            res,
+            constants.AGGREGATES_UPDATE_METADATA_TEMPLATE
+        )
+        self.assertTemplateUsed(
+            res,
+            constants.AGGREGATES_UPDATE_METADATA_SUBTEMPLATE
+        )
+        self.assertContains(res, 'namespace_1')
+        self.assertContains(res, 'namespace_2')
+        self.assertContains(res, 'namespace_3')
+        self.assertContains(res, 'namespace_4')
+
+    @test.create_stubs({api.nova: ('aggregate_get', 'aggregate_set_metadata')})
+    def test_host_aggregate_metadata_update(self):
+        aggregate = self.aggregates.first()
+        aggregate.metadata = {'key': 'test_key', 'value': 'test_value'}
+
+        api.nova.aggregate_get(
+            IsA(http.HttpRequest),
+            str(aggregate.id)
+        ).AndReturn(aggregate)
+
+        api.nova.aggregate_set_metadata(
+            IsA(http.HttpRequest),
+            str(aggregate.id),
+            {'value': None, 'key': None, 'test_key': 'test_value'}
+        ).AndReturn(None)
+
+        self.mox.ReplayAll()
+
+        form_data = {"metadata": json.dumps([aggregate.metadata])}
+
+        res = self.client.post(
+            reverse(constants.AGGREGATES_UPDATE_METADATA_URL,
+                    args=(aggregate.id,)), form_data)
+
+        self.assertEqual(res.status_code, 302)
+        self.assertNoFormErrors(res)
+        self.assertMessageCount(success=1)
+        self.assertRedirectsNoFollow(
+            res,
+            reverse(constants.AGGREGATES_INDEX_URL)
+        )

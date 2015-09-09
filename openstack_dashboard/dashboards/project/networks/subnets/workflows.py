@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 NEC Corporation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -21,7 +19,6 @@ from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
 from horizon import forms
-from horizon.utils import fields
 from horizon import workflows
 
 from openstack_dashboard import api
@@ -35,12 +32,13 @@ LOG = logging.getLogger(__name__)
 class CreateSubnetInfoAction(network_workflows.CreateSubnetInfoAction):
     with_subnet = forms.BooleanField(initial=True, required=False,
                                      widget=forms.HiddenInput())
+    msg = _('Specify "Network Address"')
 
-    class Meta:
+    class Meta(object):
         name = _("Subnet")
-        help_text = _('You can create a subnet associated with the '
-                      'network. Advanced configuration are available '
-                      'at "Subnet Detail" tab.')
+        help_text = _('Create a subnet associated with the network. '
+                      'Advanced configuration is available by clicking on the '
+                      '"Subnet Details" tab.')
 
     def clean(self):
         cleaned_data = workflows.Action.clean(self)
@@ -80,15 +78,15 @@ class CreateSubnet(network_workflows.CreateNetwork):
 
 
 class UpdateSubnetInfoAction(CreateSubnetInfoAction):
-    cidr = fields.IPField(label=_("Network Address"),
-                          required=False,
-                          initial="",
-                          widget=forms.TextInput(
-                              attrs={'readonly': 'readonly'}),
-                          help_text=_("Network address in CIDR format "
-                                      "(e.g. 192.168.0.0/24)"),
-                          version=fields.IPv4 | fields.IPv6,
-                          mask=True)
+    cidr = forms.IPField(label=_("Network Address"),
+                         required=False,
+                         initial="",
+                         widget=forms.TextInput(
+                             attrs={'readonly': 'readonly'}),
+                         help_text=_("Network address in CIDR format "
+                                     "(e.g. 192.168.0.0/24)"),
+                         version=forms.IPv4 | forms.IPv6,
+                         mask=True)
     # NOTE(amotoki): When 'disabled' attribute is set for the ChoiceField
     # and ValidationError is raised for POST request, the initial value of
     # the ip_version ChoiceField is not set in the re-displayed form
@@ -98,30 +96,27 @@ class UpdateSubnetInfoAction(CreateSubnetInfoAction):
     # Thus now I use HiddenInput for the ip_version ChoiceField as a work
     # around.
     ip_version = forms.ChoiceField(choices=[(4, 'IPv4'), (6, 'IPv6')],
-                                   #widget=forms.Select(
-                                   #    attrs={'disabled': 'disabled'}),
                                    widget=forms.HiddenInput(),
                                    label=_("IP Version"))
 
-    gateway_ip = fields.IPField(
+    gateway_ip = forms.IPField(
         label=_("Gateway IP (optional)"),
         required=False,
         initial="",
         help_text=_("IP address of Gateway (e.g. 192.168.0.254). "
-                    "You need to specify an explicit address "
-                    "to set the gateway. "
-                    "If you want to use no gateway, "
+                    "Specify an explicit address to set the gateway. "
+                    "If you do not want to use a gateway, "
                     "check 'Disable Gateway' below."),
-        version=fields.IPv4 | fields.IPv6,
+        version=forms.IPv4 | forms.IPv6,
         mask=False)
     no_gateway = forms.BooleanField(label=_("Disable Gateway"),
                                     initial=False, required=False)
 
-    class Meta:
+    class Meta(object):
         name = _("Subnet")
-        help_text = _('You can update a subnet associated with the '
-                      'network. Advanced configuration are available '
-                      'at "Subnet Detail" tab.')
+        help_text = _('Update a subnet associated with the network. '
+                      'Advanced configuration are available at '
+                      '"Subnet Details" tab.')
 
     def clean(self):
         cleaned_data = workflows.Action.clean(self)
@@ -135,12 +130,23 @@ class UpdateSubnetInfo(CreateSubnetInfo):
 
 
 class UpdateSubnetDetailAction(network_workflows.CreateSubnetDetailAction):
-    allocation_pools = forms.CharField(widget=forms.HiddenInput(),
-                                       required=False)
 
-    class Meta:
-        name = _("Subnet Detail")
-        help_text = _('You can specify additional attributes for the subnet.')
+    def __init__(self, request, context, *args, **kwargs):
+        super(UpdateSubnetDetailAction, self).__init__(request, context,
+                                                       *args, **kwargs)
+        # TODO(amotoki): Due to Neutron bug 1362966, we cannot pass "None"
+        # to Neutron. It means we cannot set IPv6 two modes to
+        # "No option selected".
+        # Until bug 1362966 is fixed, we disable this field.
+        # if context['ip_version'] != 6:
+        #     self.fields['ipv6_modes'].widget = forms.HiddenInput()
+        #     self.fields['ipv6_modes'].required = False
+        self.fields['ipv6_modes'].widget = forms.HiddenInput()
+        self.fields['ipv6_modes'].required = False
+
+    class Meta(object):
+        name = _("Subnet Details")
+        help_text = _('Specify additional attributes for the subnet.')
 
 
 class UpdateSubnetDetail(network_workflows.CreateSubnetDetail):
@@ -177,10 +183,9 @@ class UpdateSubnet(network_workflows.CreateNetwork):
             elif data['gateway_ip']:
                 params['gateway_ip'] = data['gateway_ip']
 
-            #We should send gateway_ip only when it is changed,
-            #because updating gateway_ip is prohibited
-            #when the ip is used.
-            #see bug 1227268
+            # We should send gateway_ip only when it is changed, because
+            # updating gateway_ip is prohibited when the ip is used.
+            # See bug 1227268.
             subnet = api.neutron.subnet_get(request, subnet_id)
             if params['gateway_ip'] == subnet.gateway_ip:
                 del params['gateway_ip']

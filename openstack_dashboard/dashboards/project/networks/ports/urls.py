@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 NEC Corporation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,8 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.project.networks.ports import views
 
@@ -24,6 +22,7 @@ PORTS = r'^(?P<port_id>[^/]+)/%s$'
 VIEW_MOD = 'openstack_dashboard.dashboards.project.networks.ports.views'
 
 
-urlpatterns = patterns(VIEW_MOD,
+urlpatterns = patterns(
+    VIEW_MOD,
     url(PORTS % 'detail', views.DetailView.as_view(), name='detail')
 )

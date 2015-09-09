@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -20,7 +18,9 @@ from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.template import defaultfilters as filters
 from django.utils.http import urlencode
+from django.utils.translation import pgettext_lazy
 from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ungettext_lazy
 
 from horizon import tables
 from horizon.utils.memoized import memoized  # noqa
@@ -33,9 +33,10 @@ NOT_LAUNCHABLE_FORMATS = ['aki', 'ari']
 
 class LaunchImage(tables.LinkAction):
     name = "launch_image"
-    verbose_name = _("Launch")
+    verbose_name = _("Launch Instance")
     url = "horizon:project:instances:launch"
-    classes = ("btn-launch", "ajax-modal")
+    classes = ("ajax-modal", "btn-launch")
+    icon = "cloud-upload"
     policy_rules = (("compute", "compute:create"),)
 
     def get_link_url(self, datum):
@@ -56,9 +57,49 @@ class LaunchImage(tables.LinkAction):
         return False
 
 
+class LaunchImageNG(LaunchImage):
+    name = "launch_image_ng"
+    verbose_name = _("Launch")
+    classes = ("btn-launch")
+    ajax = False
+
+    def __init__(self,
+                 attrs={
+                     "ng-controller": "LaunchInstanceModalCtrl"
+                 },
+                 **kwargs):
+        kwargs['preempt'] = True
+        super(LaunchImage, self).__init__(attrs, **kwargs)
+
+    def get_link_url(self, datum):
+        imageId = self.table.get_object_id(datum)
+        clickValue = "openLaunchInstanceWizard({successUrl: " +\
+                     "'/project/images/', imageId: '%s'})" % (imageId)
+        self.attrs['ng-click'] = clickValue
+        return "javascript:void(0);"
+
+
 class DeleteImage(tables.DeleteAction):
-    data_type_singular = _("Image")
-    data_type_plural = _("Images")
+    # NOTE: The bp/add-batchactions-help-text
+    # will add appropriate help text to some batch/delete actions.
+    help_text = _("Deleted images are not recoverable.")
+
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Image",
+            u"Delete Images",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Image",
+            u"Deleted Images",
+            count
+        )
+
     policy_rules = (("image", "delete_image"),)
 
     def allowed(self, request, image=None):
@@ -78,15 +119,17 @@ class CreateImage(tables.LinkAction):
     name = "create"
     verbose_name = _("Create Image")
     url = "horizon:project:images:images:create"
-    classes = ("ajax-modal", "btn-create")
+    classes = ("ajax-modal",)
+    icon = "plus"
     policy_rules = (("image", "add_image"),)
 
 
 class EditImage(tables.LinkAction):
     name = "edit"
-    verbose_name = _("Edit")
+    verbose_name = _("Edit Image")
     url = "horizon:project:images:images:update"
-    classes = ("ajax-modal", "btn-edit")
+    classes = ("ajax-modal",)
+    icon = "pencil"
     policy_rules = (("image", "modify_image"),)
 
     def allowed(self, request, image=None):
@@ -102,7 +145,8 @@ class CreateVolumeFromImage(tables.LinkAction):
     name = "create_volume_from_image"
     verbose_name = _("Create Volume")
     url = "horizon:project:volumes:volumes:create"
-    classes = ("ajax-modal", "btn-camera")
+    classes = ("ajax-modal",)
+    icon = "camera"
     policy_rules = (("volume", "volume:create"),)
 
     def get_link_url(self, datum):
@@ -131,13 +175,14 @@ class OwnerFilter(tables.FixedFilterAction):
         def make_dict(text, tenant, icon):
             return dict(text=text, value=tenant, icon=icon)
 
-        buttons = [make_dict(_('Project'), 'project', 'icon-home')]
+        buttons = [make_dict(_('Project'), 'project', 'fa-home')]
         for button_dict in filter_tenants():
             new_dict = button_dict.copy()
             new_dict['value'] = new_dict['tenant']
             buttons.append(new_dict)
-        buttons.append(make_dict(_('Shared with Me'), 'shared', 'icon-share'))
-        buttons.append(make_dict(_('Public'), 'public', 'icon-fire'))
+        buttons.append(make_dict(_('Shared with Me'), 'shared',
+                                 'fa-share-square-o'))
+        buttons.append(make_dict(_('Public'), 'public', 'fa-group'))
         return buttons
 
     def categorize(self, table, images):
@@ -175,8 +220,13 @@ def get_format(image):
     format = getattr(image, "disk_format", "")
     # The "container_format" attribute can actually be set to None,
     # which will raise an error if you call upper() on it.
-    if format is not None:
-        return format.upper()
+    if not format:
+        return format
+    # Most image formats are untranslated acronyms, but raw is a word
+    # and should be translated
+    if format == "raw":
+        return pgettext_lazy("Image format for display in table", u"Raw")
+    return format.upper()
 
 
 class UpdateRow(tables.Row):
@@ -205,17 +255,30 @@ class ImagesTable(tables.DataTable):
         ("killed", False),
         ("deleted", False),
     )
+    STATUS_DISPLAY_CHOICES = (
+        ("active", pgettext_lazy("Current status of an Image", u"Active")),
+        ("saving", pgettext_lazy("Current status of an Image", u"Saving")),
+        ("queued", pgettext_lazy("Current status of an Image", u"Queued")),
+        ("pending_delete", pgettext_lazy("Current status of an Image",
+                                         u"Pending Delete")),
+        ("killed", pgettext_lazy("Current status of an Image", u"Killed")),
+        ("deleted", pgettext_lazy("Current status of an Image", u"Deleted")),
+    )
+    TYPE_CHOICES = (
+        ("image", pgettext_lazy("Type of an image", u"Image")),
+        ("snapshot", pgettext_lazy("Type of an image", u"Snapshot")),
+    )
     name = tables.Column(get_image_name,
-                         link=("horizon:project:images:images:detail"),
+                         link="horizon:project:images:images:detail",
                          verbose_name=_("Image Name"))
     image_type = tables.Column(get_image_type,
                                verbose_name=_("Type"),
-                               filters=(filters.title,))
+                               display_choices=TYPE_CHOICES)
     status = tables.Column("status",
-                           filters=(filters.title,),
                            verbose_name=_("Status"),
                            status=True,
-                           status_choices=STATUS_CHOICES)
+                           status_choices=STATUS_CHOICES,
+                           display_choices=STATUS_DISPLAY_CHOICES)
     public = tables.Column("is_public",
                            verbose_name=_("Public"),
                            empty_value=False,
@@ -225,13 +288,22 @@ class ImagesTable(tables.DataTable):
                               empty_value=False,
                               filters=(filters.yesno, filters.capfirst))
     disk_format = tables.Column(get_format, verbose_name=_("Format"))
+    size = tables.Column("size",
+                         filters=(filters.filesizeformat,),
+                         attrs=({"data-type": "size"}),
+                         verbose_name=_("Size"))
 
-    class Meta:
+    class Meta(object):
         name = "images"
         row_class = UpdateRow
         status_columns = ["status"]
         verbose_name = _("Images")
         table_actions = (OwnerFilter, CreateImage, DeleteImage,)
-        row_actions = (LaunchImage, CreateVolumeFromImage,
-                       EditImage, DeleteImage,)
+        launch_actions = ()
+        if getattr(settings, 'LAUNCH_INSTANCE_LEGACY_ENABLED', True):
+            launch_actions = (LaunchImage,) + launch_actions
+        if getattr(settings, 'LAUNCH_INSTANCE_NG_ENABLED', False):
+            launch_actions = (LaunchImageNG,) + launch_actions
+        row_actions = launch_actions + (CreateVolumeFromImage,
+                                        EditImage, DeleteImage,)
         pagination_param = "image_marker"

@@ -57,9 +57,8 @@ class BaseUsage(object):
 
     def get_date_range(self):
         if not hasattr(self, "start") or not hasattr(self, "end"):
-            args_start = args_end = (self.today.year,
-                                     self.today.month,
-                                     self.today.day)
+            args_start = (self.today.year, self.today.month, 1)
+            args_end = (self.today.year, self.today.month, self.today.day)
             form = self.get_form()
             if form.is_valid():
                 start = form.cleaned_data['start']
@@ -80,27 +79,28 @@ class BaseUsage(object):
 
     def init_form(self):
         today = datetime.date.today()
-        first = datetime.date(day=1, month=today.month, year=today.year)
-        if today.day in range(5):
-            self.end = first - datetime.timedelta(days=1)
-            self.start = datetime.date(day=1,
-                                       month=self.end.month,
-                                       year=self.end.year)
-        else:
-            self.end = today
-            self.start = first
+        self.start = datetime.date(day=1, month=today.month, year=today.year)
+        self.end = today
+
         return self.start, self.end
 
     def get_form(self):
         if not hasattr(self, 'form'):
-            if any(key in ['start', 'end'] for key in self.request.GET):
+            req = self.request
+            start = req.GET.get('start', req.session.get('usage_start'))
+            end = req.GET.get('end', req.session.get('usage_end'))
+            if start and end:
                 # bound form
-                self.form = forms.DateForm(self.request.GET)
+                self.form = forms.DateForm({'start': start, 'end': end})
             else:
                 # non-bound form
                 init = self.init_form()
-                self.form = forms.DateForm(initial={'start': init[0],
-                                                    'end': init[1]})
+                start = init[0].isoformat()
+                end = init[1].isoformat()
+                self.form = forms.DateForm(initial={'start': start,
+                                                    'end': end})
+            req.session['usage_start'] = start
+            req.session['usage_end'] = end
         return self.form
 
     def _get_neutron_usage(self, limits, resource_name):
@@ -146,26 +146,30 @@ class BaseUsage(object):
     def get_neutron_limits(self):
         if not api.base.is_service_enabled(self.request, 'network'):
             return
-
-        neutron_sg_used = \
-            api.neutron.is_security_group_extension_supported(self.request)
-
-        self._get_neutron_usage(self.limits, 'floatingip')
-        if neutron_sg_used:
-            self._get_neutron_usage(self.limits, 'security_group')
-
-        # Quotas are an optional extension in Neutron. If it isn't
-        # enabled, assume the floating IP limit is infinite.
-        if api.neutron.is_quotas_extension_supported(self.request):
-            try:
+        try:
+            neutron_quotas_supported = (
+                api.neutron.is_quotas_extension_supported(self.request))
+            neutron_sg_used = (
+                api.neutron.is_extension_supported(self.request,
+                                                   'security-group'))
+            if api.network.floating_ip_supported(self.request):
+                self._get_neutron_usage(self.limits, 'floatingip')
+            if neutron_sg_used:
+                self._get_neutron_usage(self.limits, 'security_group')
+            # Quotas are an optional extension in Neutron. If it isn't
+            # enabled, assume the floating IP limit is infinite.
+            if neutron_quotas_supported:
                 neutron_quotas = api.neutron.tenant_quota_get(self.request,
                                                               self.project_id)
-            except Exception:
+            else:
                 neutron_quotas = None
-                msg = _('Unable to retrieve network quota information.')
-                exceptions.handle(self.request, msg)
-        else:
+        except Exception:
+            # Assume neutron security group and quotas are enabled
+            # because they are enabled in most Neutron plugins.
+            neutron_sg_used = True
             neutron_quotas = None
+            msg = _('Unable to retrieve network quota information.')
+            exceptions.handle(self.request, msg)
 
         self._set_neutron_limit(self.limits, neutron_quotas, 'floatingip')
         if neutron_sg_used:
@@ -194,7 +198,7 @@ class BaseUsage(object):
         self.get_cinder_limits()
 
     def get_usage_list(self, start, end):
-        raise NotImplementedError("You must define a get_usage_list method.")
+        return []
 
     def summarize(self, start, end):
         if not api.nova.extension_supported('SimpleTenantUsage', self.request):

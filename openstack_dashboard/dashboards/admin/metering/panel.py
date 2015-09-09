@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,7 +19,10 @@ from openstack_dashboard.dashboards.admin import dashboard
 class Metering(horizon.Panel):
     name = _("Resource Usage")
     slug = 'metering'
-    permissions = ('openstack.services.metering', 'openstack.roles.admin', )
+    permissions = ('openstack.services.metering', )
+    policy_rules = (('identity', 'identity:list_projects'),
+                    ('telemetry', 'telemetry:compute_statistics'),
+                    ('telemetry', 'telemetry:get_meter'),)
 
 
 dashboard.Admin.register(Metering)

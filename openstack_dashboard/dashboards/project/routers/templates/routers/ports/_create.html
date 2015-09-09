@@ -15,7 +15,7 @@
     </fieldset>
 </div>
 <div class="right">
-    <h3>{% trans "Description" %}:</h3>
+    <h3>{% trans "Description:" %}</h3>
     <p>
       {% trans "You can connect a specified subnet to the router." %}
     </p>
@@ -27,5 +27,5 @@
 
 {% block modal-footer %}
   <input class="btn btn-primary pull-right" type="submit" value="{% trans "Add interface" %}" />
-  <a href="{% url 'horizon:project:routers:index' %}" class="btn secondary cancel close">{% trans "Cancel" %}</a>
+  <a href="{% url 'horizon:project:routers:index' %}" class="btn btn-default secondary cancel close">{% trans "Cancel" %}</a>
 {% endblock %}

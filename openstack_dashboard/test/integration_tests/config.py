@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -14,7 +12,7 @@
 
 import os
 
-from oslo.config import cfg
+from oslo_config import cfg
 
 
 DashboardGroup = [
@@ -24,9 +22,9 @@ DashboardGroup = [
     cfg.StrOpt('login_url',
                default='http://localhost/auth/login/',
                help="Login page for the dashboard"),
-    cfg.IntOpt('page_timeout',
-               default=10,
-               help="Timeout in seconds"),
+    cfg.StrOpt('help_url',
+               default='http://docs.openstack.org/',
+               help="Dashboard help page url"),
 ]
 
 IdentityGroup = [
@@ -47,6 +45,36 @@ IdentityGroup = [
                secret=True),
 ]
 
+ImageGroup = [
+    cfg.StrOpt('http_image',
+               default='http://download.cirros-cloud.net/0.3.1/'
+                       'cirros-0.3.1-x86_64-uec.tar.gz',
+               help='http accessible image'),
+]
+
+AvailableServiceGroup = [
+    cfg.BoolOpt('sahara',
+                default=False)
+]
+
+SeleniumGroup = [
+    cfg.IntOpt('implicit_wait',
+               default=10,
+               help="Implicit wait timeout in seconds"),
+    cfg.IntOpt('explicit_wait',
+               default=10,
+               help="Explicit wait timeout in seconds"),
+    cfg.IntOpt('page_timeout',
+               default=30,
+               help="Page load timeout in seconds"),
+]
+
+ScenarioGroup = [
+    cfg.StrOpt('ssh_user',
+               default='cirros',
+               help='ssh username for image file'),
+]
+
 
 def _get_config_files():
     conf_dir = os.path.join(
@@ -62,5 +90,9 @@ def get_config():
 
     cfg.CONF.register_opts(DashboardGroup, group="dashboard")
     cfg.CONF.register_opts(IdentityGroup, group="identity")
+    cfg.CONF.register_opts(AvailableServiceGroup, group="service_available")
+    cfg.CONF.register_opts(SeleniumGroup, group="selenium")
+    cfg.CONF.register_opts(ImageGroup, group="image")
+    cfg.CONF.register_opts(ScenarioGroup, group="scenario")
 
     return cfg.CONF

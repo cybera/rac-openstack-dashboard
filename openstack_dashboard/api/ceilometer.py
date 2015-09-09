@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,6 +19,7 @@ from django.utils import datastructures
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
+from horizon.utils.memoized import memoized  # noqa
 
 from openstack_dashboard.api import base
 from openstack_dashboard.api import keystone
@@ -37,19 +36,19 @@ def get_flavor_names(request):
         return [f.name for f in flavors]
     except Exception:
         return ['m1.tiny', 'm1.small', 'm1.medium',
-            'm1.large', 'm1.xlarge']
+                'm1.large', 'm1.xlarge']
 
 
 def is_iterable(var):
     """Return True if the given is list or tuple."""
 
     return (isinstance(var, (list, tuple)) or
-        issubclass(var.__class__, (list, tuple)))
+            issubclass(var.__class__, (list, tuple)))
 
 
 def make_query(user_id=None, tenant_id=None, resource_id=None,
-        user_ids=None, tenant_ids=None, resource_ids=None):
-    """Returns query built form given parameters.
+               user_ids=None, tenant_ids=None, resource_ids=None):
+    """Returns query built from given parameters.
 
     This query can be then used for querying resources, meters and
     statistics.
@@ -87,8 +86,7 @@ def make_query(user_id=None, tenant_id=None, resource_id=None,
 
 class Meter(base.APIResourceWrapper):
     """Represents one Ceilometer meter."""
-    _attrs = ['name', 'type', 'unit', 'resource_id', 'user_id',
-              'project_id']
+    _attrs = ['name', 'type', 'unit', 'resource_id', 'user_id', 'project_id']
 
     def __init__(self, apiresource):
         super(Meter, self).__init__(apiresource)
@@ -119,7 +117,7 @@ class Resource(base.APIResourceWrapper):
     def __init__(self, apiresource, ceilometer_usage=None):
         super(Resource, self).__init__(apiresource)
 
-        # Save empty strings to IDs rather then None, sop it gets
+        # Save empty strings to IDs rather than None, so it gets
         # serialized correctly. We don't want 'None' strings.
         self.project_id = self.project_id or ""
         self.user_id = self.user_id or ""
@@ -128,6 +126,9 @@ class Resource(base.APIResourceWrapper):
         self._id = "%s__%s__%s" % (self.project_id,
                                    self.user_id,
                                    self.resource_id)
+
+        # Meters with statistics data
+        self._meters = {}
 
         # TODO(lsmola) make parallel obtaining of tenant and user
         # make the threading here, thread join into resource_list
@@ -171,17 +172,27 @@ class Resource(base.APIResourceWrapper):
     def query(self):
         return self._query
 
+    @property
+    def meters(self):
+        return self._meters
+
+    def get_meter(self, meter_name):
+        return self._meters.get(meter_name, None)
+
+    def set_meter(self, meter_name, value):
+        self._meters[meter_name] = value
+
 
 class ResourceAggregate(Resource):
     """Represents aggregate of more resources together.
 
-    Aggregate of resources can be obtain by specifing
+    Aggregate of resources can be obtained by specifying
     multiple ids in one parameter or by not specifying
     one parameter.
-    Or it can be specified by query directly.
+    It can also be specified by query directly.
 
     Example:
-        We obtain can have aggregate of resources by specifying
+        We can obtain an aggregate of resources by specifying
         multiple resource_ids in resource_id parameter in init.
         Or we can specify only tenant_id, which will return
         all resources of that tenant.
@@ -197,29 +208,34 @@ class ResourceAggregate(Resource):
         self.user_id = None
         self.resource_id = None
 
+        # Meters with statistics data
+        self._meters = {}
+
         if query:
             self._query = query
         else:
             # TODO(lsmola) make parallel obtaining of tenant and user
             # make the threading here, thread join into resource_list
-            if (ceilometer_usage and tenant_id):
+            if ceilometer_usage and tenant_id:
                 self.tenant_id = tenant_id
                 self._tenant = ceilometer_usage.get_tenant(tenant_id)
             else:
                 self._tenant = None
 
-            if (ceilometer_usage and user_id):
+            if ceilometer_usage and user_id:
                 self.user_id = user_id
                 self._user = ceilometer_usage.get_user(user_id)
             else:
                 self._user = None
 
-            if (resource_id):
+            if resource_id:
                 self.resource_id = resource_id
 
             self._query = make_query(tenant_id=tenant_id, user_id=user_id,
-                resource_id=resource_id, tenant_ids=tenant_ids,
-                user_ids=user_ids, resource_ids=resource_ids)
+                                     resource_id=resource_id,
+                                     tenant_ids=tenant_ids,
+                                     user_ids=user_ids,
+                                     resource_ids=resource_ids)
 
     @property
     def id(self):
@@ -254,24 +270,22 @@ class Statistic(base.APIResourceWrapper):
               'duration', 'duration_start', 'duration_end']
 
 
+@memoized
 def ceilometerclient(request):
     """Initialization of Ceilometer client."""
 
     endpoint = base.url_for(request, 'metering')
     insecure = getattr(settings, 'OPENSTACK_SSL_NO_VERIFY', False)
     cacert = getattr(settings, 'OPENSTACK_SSL_CACERT', None)
-    LOG.debug('ceilometerclient connection created using token "%s" '
-              'and endpoint "%s"' % (request.user.token.id, endpoint))
     return ceilometer_client.Client('2', endpoint,
                                     token=(lambda: request.user.token.id),
                                     insecure=insecure,
-                                    ca_file=cacert)
+                                    cacert=cacert)
 
 
 def resource_list(request, query=None, ceilometer_usage_object=None):
     """List the resources."""
-    resources = ceilometerclient(request).\
-        resources.list(q=query)
+    resources = ceilometerclient(request).resources.list(q=query)
     return [Resource(r, ceilometer_usage_object) for r in resources]
 
 
@@ -340,21 +354,22 @@ class ThreadedUpdateResourceWithStatistics(threading.Thread):
 
     def run(self):
         # Run the job
-        self.resource_usage.update_with_statistics(self.resource,
+        self.resource_usage.update_with_statistics(
+            self.resource,
             meter_names=self.meter_names, period=self.period,
             stats_attr=self.stats_attr, additional_query=self.additional_query)
 
     @classmethod
     def process_list(cls, resource_usage, resources, meter_names=None,
-                 period=None, filter_func=None, stats_attr=None,
-                 additional_query=None):
+                     period=None, filter_func=None, stats_attr=None,
+                     additional_query=None):
         threads = []
 
         for resource in resources:
             # add statistics data into resource
             thread = cls(resource_usage, resource, meter_names=meter_names,
-                period=period, stats_attr=stats_attr,
-                additional_query=additional_query)
+                         period=period, stats_attr=stats_attr,
+                         additional_query=additional_query)
             thread.start()
             threads.append(thread)
 
@@ -385,10 +400,10 @@ class CeilometerUsage(object):
         self._tenants = {}
 
     def get_user(self, user_id):
-        """Returns user fetched form API
+        """Returns user fetched from API.
 
         Caching the result, so it doesn't contact API twice with the
-        same query
+        same query.
         """
 
         user = self._users.get(user_id, None)
@@ -401,7 +416,7 @@ class CeilometerUsage(object):
     def preload_all_users(self):
         """Preloads all users into dictionary.
 
-        It's more effective to preload all users, rather the fetching many
+        It's more effective to preload all users, rather than fetching many
         users by separate API get calls.
         """
 
@@ -412,10 +427,10 @@ class CeilometerUsage(object):
             self._users[u.id] = u
 
     def get_tenant(self, tenant_id):
-        """Returns tenant fetched form API.
+        """Returns tenant fetched from API.
 
         Caching the result, so it doesn't contact API twice with the
-        same query
+        same query.
         """
 
         tenant = self._tenants.get(tenant_id, None)
@@ -426,10 +441,10 @@ class CeilometerUsage(object):
         return tenant
 
     def preload_all_tenants(self):
-        """Preloads all teannts into dictionary.
+        """Preloads all tenants into dictionary.
 
-        It's more effective to preload all tenants, rather the fetching many
-        tenants by separate API get calls.
+        It's more effective to preload all tenants, rather than fetching each
+        tenant by separate API get calls.
         """
 
         tenants, more = keystone.tenant_list(self._request)
@@ -471,9 +486,9 @@ class CeilometerUsage(object):
         filter_func = None
 
         def filter_resources(resource):
-            """Method for filtering resources by theirs links.rel attr.
+            """Method for filtering resources by their links.rel attr.
 
-            The links.rel attributes contains all meters the resource have.
+            The links.rel attributes contain all meters the resource has.
             """
             for link in resource.links:
                 if link['rel'] in used_cls.meters:
@@ -481,7 +496,7 @@ class CeilometerUsage(object):
             return False
 
         if not query:
-            # Not all resource types can be obtain by query, if there is not
+            # Not all resource types can be obtained by query, if there is not
             # a query, we are filtering all resources by this function.
             filter_func = filter_resources
 
@@ -496,7 +511,8 @@ class CeilometerUsage(object):
                 with_users_and_tenants=with_users_and_tenants)
         else:
             # Will load only resources without statistical data.
-            resources = self.resources(query, filter_func=filter_func,
+            resources = self.resources(
+                query, filter_func=filter_func,
                 with_users_and_tenants=with_users_and_tenants)
 
         return [used_cls(resource) for resource in resources]
@@ -542,7 +558,7 @@ class CeilometerUsage(object):
         """
 
         if not meter_names:
-            raise ValueError("meter_names and resource must be defined to be"
+            raise ValueError("meter_names and resources must be defined to be "
                              "able to obtain the statistics.")
 
         # query for identifying one resource in meters
@@ -565,13 +581,14 @@ class CeilometerUsage(object):
             if statistics:
                 if stats_attr:
                     # I want to load only a specific attribute
-                    setattr(resource, meter,
-                            getattr(statistics[0], stats_attr, None))
+                    resource.set_meter(
+                        meter,
+                        getattr(statistics[0], stats_attr, None))
                 else:
                     # I want a dictionary of all statistics
-                    setattr(resource, meter, statistics)
+                    resource.set_meter(meter, statistics)
             else:
-                setattr(resource, meter, None)
+                resource.set_meter(meter, None)
 
         return resource
 
@@ -593,7 +610,8 @@ class CeilometerUsage(object):
             ceilometer_usage_object = self
         else:
             ceilometer_usage_object = None
-        resources = resource_list(self._request,
+        resources = resource_list(
+            self._request,
             query=query, ceilometer_usage_object=ceilometer_usage_object)
         if filter_func:
             resources = [resource for resource in resources if
@@ -628,10 +646,12 @@ class CeilometerUsage(object):
                                       be added to each resource object.
         """
 
-        resources = self.resources(query, filter_func=filter_func,
+        resources = self.resources(
+            query, filter_func=filter_func,
             with_users_and_tenants=with_users_and_tenants)
 
-        ThreadedUpdateResourceWithStatistics.process_list(self, resources,
+        ThreadedUpdateResourceWithStatistics.process_list(
+            self, resources,
             meter_names=meter_names, period=period, stats_attr=stats_attr,
             additional_query=additional_query)
 
@@ -655,8 +675,9 @@ class CeilometerUsage(object):
         return resource_aggregates
 
     def resource_aggregates_with_statistics(self, queries=None,
-            meter_names=None, period=None, filter_func=None, stats_attr=None,
-            additional_query=None):
+                                            meter_names=None, period=None,
+                                            filter_func=None, stats_attr=None,
+                                            additional_query=None):
         """Obtaining resource aggregates with statistics data inside.
 
         :Parameters:
@@ -678,7 +699,8 @@ class CeilometerUsage(object):
         """
         resource_aggregates = self.resource_aggregates(queries)
 
-        ThreadedUpdateResourceWithStatistics.process_list(self,
+        ThreadedUpdateResourceWithStatistics.process_list(
+            self,
             resource_aggregates, meter_names=meter_names, period=period,
             stats_attr=stats_attr, additional_query=additional_query)
 
@@ -695,7 +717,7 @@ def diff_lists(a, b):
 
 
 class Meters(object):
-    """Class for listing of available meters
+    """Class for listing of available meters.
 
     It is listing meters defined in this class that are available
     in Ceilometer meter_list.
@@ -718,7 +740,7 @@ class Meters(object):
             except Exception:
                 self._ceilometer_meter_list = []
                 exceptions.handle(self._request,
-                                  _('Unable to retrieve Ceilometer meter'
+                                  _('Unable to retrieve Ceilometer meter '
                                     'list.'))
 
         # Storing the meters info categorized by their services.
@@ -728,99 +750,113 @@ class Meters(object):
         self._cinder_meters_info = self._get_cinder_meters_info()
         self._swift_meters_info = self._get_swift_meters_info()
         self._kwapi_meters_info = self._get_kwapi_meters_info()
+        self._ipmi_meters_info = self._get_ipmi_meters_info()
 
         # Storing the meters info of all services together.
         all_services_meters = (self._nova_meters_info,
-            self._neutron_meters_info, self._glance_meters_info,
-            self._cinder_meters_info, self._swift_meters_info,
-            self._kwapi_meters_info)
+                               self._neutron_meters_info,
+                               self._glance_meters_info,
+                               self._cinder_meters_info,
+                               self._swift_meters_info,
+                               self._kwapi_meters_info,
+                               self._ipmi_meters_info)
         self._all_meters_info = {}
         for service_meters in all_services_meters:
             self._all_meters_info.update(dict([(meter_name, meter_info)
-                for meter_name,
-                    meter_info in service_meters.items()]))
+                                               for meter_name, meter_info
+                                               in service_meters.items()]))
 
         # Here will be the cached Meter objects, that will be reused for
         # repeated listing.
         self._cached_meters = {}
 
     def list_all(self, only_meters=None, except_meters=None):
-        """Returns a list of meters based on the meters names
+        """Returns a list of meters based on the meters names.
 
         :Parameters:
-          - `only_meters`: The list of meter_names we want to show
-          - `except_meters`: The list of meter names we don't want to show
+          - `only_meters`: The list of meter names we want to show.
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=only_meters,
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_nova(self, except_meters=None):
-        """Returns a list of meters tied to nova
+        """Returns a list of meters tied to nova.
 
         :Parameters:
-          - `except_meters`: The list of meter names we don't want to show
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=self._nova_meters_info.keys(),
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_neutron(self, except_meters=None):
-        """Returns a list of meters tied to neutron
+        """Returns a list of meters tied to neutron.
 
         :Parameters:
-          - `except_meters`: The list of meter names we don't want to show
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=self._neutron_meters_info.keys(),
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_glance(self, except_meters=None):
-        """Returns a list of meters tied to glance
+        """Returns a list of meters tied to glance.
 
         :Parameters:
-          - `except_meters`: The list of meter names we don't want to show
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=self._glance_meters_info.keys(),
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_cinder(self, except_meters=None):
-        """Returns a list of meters tied to cinder
+        """Returns a list of meters tied to cinder.
 
         :Parameters:
-          - `except_meters`: The list of meter names we don't want to show
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=self._cinder_meters_info.keys(),
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_swift(self, except_meters=None):
-        """Returns a list of meters tied to swift
+        """Returns a list of meters tied to swift.
 
         :Parameters:
-          - `except_meters`: The list of meter names we don't want to show
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         return self._list(only_meters=self._swift_meters_info.keys(),
-            except_meters=except_meters)
+                          except_meters=except_meters)
 
     def list_kwapi(self, except_meters=None):
-        """Returns a list of meters tied to kwapi
+        """Returns a list of meters tied to kwapi.
+
+        :Parameters:
+          - `except_meters`: The list of meter names we don't want to show.
+        """
+
+        return self._list(only_meters=self._kwapi_meters_info.keys(),
+                          except_meters=except_meters)
+
+    def list_ipmi(self, except_meters=None):
+        """Returns a list of meters tied to ipmi
 
         :Parameters:
           - `except_meters`: The list of meter names we don't want to show
         """
 
-        return self._list(only_meters=self._kwapi_meters_info.keys(),
-            except_meters=except_meters)
+        return self._list(only_meters=self._ipmi_meters_info.keys(),
+                          except_meters=except_meters)
 
     def _list(self, only_meters=None, except_meters=None):
-        """Returns a list of meters based on the meters names
+        """Returns a list of meters based on the meters names.
 
         :Parameters:
-          - `only_meters`: The list of meter_names we want to show
-          - `except_meters`: The list of meter names we don't want to show
+          - `only_meters`: The list of meter names we want to show.
+          - `except_meters`: The list of meter names we don't want to show.
         """
 
         # Get all wanted meter names.
@@ -828,14 +864,14 @@ class Meters(object):
             meter_names = only_meters
         else:
             meter_names = [meter_name for meter_name
-                            in self._all_meters_info.keys()]
+                           in self._all_meters_info.keys()]
 
         meter_names = diff_lists(meter_names, except_meters)
         # Collect meters for wanted meter names.
         return self._get_meters(meter_names)
 
     def _get_meters(self, meter_names):
-        """Obtain meters based on meter_names
+        """Obtain meters based on meter_names.
 
         The meters that do not exist in Ceilometer meter list are left out.
 
@@ -851,7 +887,7 @@ class Meters(object):
         return meters
 
     def _get_meter(self, meter_name):
-        """Obtains a meter
+        """Obtains a meter.
 
         Obtains meter either from cache or from Ceilometer meter list
         joined with statically defined meter info like label and description.
@@ -880,7 +916,7 @@ class Meters(object):
         return meter
 
     def _get_nova_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
         That will be used for augmenting the Ceilometer meter.
         """
@@ -892,16 +928,20 @@ class Meters(object):
         meters_info = datastructures.SortedDict([
             ("instance", {
                 'label': '',
-                'description': _("Duration of instance"),
+                'description': _("Existence of instance"),
             }),
             ("instance:<type>", {
                 'label': '',
-                'description': _("Duration of instance <type> "
+                'description': _("Existence of instance <type> "
                                  "(openstack types)"),
             }),
             ("memory", {
                 'label': '',
-                'description': _("Volume of RAM in MB"),
+                'description': _("Volume of RAM"),
+            }),
+            ("memory.usage", {
+                'label': '',
+                'description': _("Volume of RAM used"),
             }),
             ("cpu", {
                 'label': '',
@@ -925,20 +965,35 @@ class Meters(object):
             }),
             ("disk.read.bytes", {
                 'label': '',
-                'description': _("Volume of reads in B"),
+                'description': _("Volume of reads"),
             }),
             ("disk.write.bytes", {
                 'label': '',
-                'description': _("Volume of writes in B"),
+                'description': _("Volume of writes"),
+            }),
+            ("disk.read.requests.rate", {
+                'label': '',
+                'description': _("Average rate of read requests"),
+            }),
+            ("disk.write.requests.rate", {
+                'label': '',
+                'description': _("Average rate of write requests"),
+            }),
+            ("disk.read.bytes.rate", {
+                'label': '',
+                'description': _("Average rate of reads"),
+            }),
+            ("disk.write.bytes.rate", {
+                'label': '',
+                'description': _("Average volume of writes"),
             }),
             ("disk.root.size", {
                 'label': '',
-                'description': _("Size of root disk in GB"),
+                'description': _("Size of root disk"),
             }),
             ("disk.ephemeral.size", {
                 'label': '',
-                'description': _("Size of ephemeral disk "
-                                 "in GB"),
+                'description': _("Size of ephemeral disk"),
             }),
             ("network.incoming.bytes", {
                 'label': '',
@@ -959,7 +1014,27 @@ class Meters(object):
                 'label': '',
                 'description': _("Number of outgoing "
                                  "packets for a VM interface"),
-            })
+            }),
+            ("network.incoming.bytes.rate", {
+                'label': '',
+                'description': _("Average rate per sec of incoming "
+                                 "bytes on a VM network interface"),
+            }),
+            ("network.outgoing.bytes.rate", {
+                'label': '',
+                'description': _("Average rate per sec of outgoing "
+                                 "bytes on a VM network interface"),
+            }),
+            ("network.incoming.packets.rate", {
+                'label': '',
+                'description': _("Average rate per sec of incoming "
+                                 "packets on a VM network interface"),
+            }),
+            ("network.outgoing.packets.rate", {
+                'label': '',
+                'description': _("Average rate per sec of outgoing "
+                                 "packets on a VM network interface"),
+            }),
         ])
         # Adding flavor based meters into meters_info dict
         # TODO(lsmola) this kind of meter will be probably deprecated
@@ -977,9 +1052,9 @@ class Meters(object):
         return meters_info
 
     def _get_neutron_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
-        That will be used for augmenting the Ceilometer meter
+        That will be used for augmenting the Ceilometer meter.
         """
 
         # TODO(lsmola) Unless the Ceilometer will provide the information
@@ -989,7 +1064,7 @@ class Meters(object):
         return datastructures.SortedDict([
             ('network', {
                 'label': '',
-                'description': _("Duration of network"),
+                'description': _("Existence of network"),
             }),
             ('network.create', {
                 'label': '',
@@ -1001,7 +1076,7 @@ class Meters(object):
             }),
             ('subnet', {
                 'label': '',
-                'description': _("Duration of subnet"),
+                'description': _("Existence of subnet"),
             }),
             ('subnet.create', {
                 'label': '',
@@ -1013,7 +1088,7 @@ class Meters(object):
             }),
             ('port', {
                 'label': '',
-                'description': _("Duration of port"),
+                'description': _("Existence of port"),
             }),
             ('port.create', {
                 'label': '',
@@ -1025,7 +1100,7 @@ class Meters(object):
             }),
             ('router', {
                 'label': '',
-                'description': _("Duration of router"),
+                'description': _("Existence of router"),
             }),
             ('router.create', {
                 'label': '',
@@ -1037,7 +1112,7 @@ class Meters(object):
             }),
             ('ip.floating', {
                 'label': '',
-                'description': _("Duration of floating ip"),
+                'description': _("Existence of floating ip"),
             }),
             ('ip.floating.create', {
                 'label': '',
@@ -1050,9 +1125,9 @@ class Meters(object):
         ])
 
     def _get_glance_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
-        That will be used for augmenting the Ceilometer meter
+        That will be used for augmenting the Ceilometer meter.
         """
 
         # TODO(lsmola) Unless the Ceilometer will provide the information
@@ -1070,15 +1145,15 @@ class Meters(object):
             }),
             ('image.update', {
                 'label': '',
-                'description': _("Number of update on the image"),
+                'description': _("Number of image updates"),
             }),
             ('image.upload', {
                 'label': '',
-                'description': _("Number of upload of the image"),
+                'description': _("Number of image uploads"),
             }),
             ('image.delete', {
                 'label': '',
-                'description': _("Number of delete on the image"),
+                'description': _("Number of image deletions"),
             }),
             ('image.download', {
                 'label': '',
@@ -1091,9 +1166,9 @@ class Meters(object):
         ])
 
     def _get_cinder_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
-        That will be used for augmenting the Ceilometer meter
+        That will be used for augmenting the Ceilometer meter.
         """
 
         # TODO(lsmola) Unless the Ceilometer will provide the information
@@ -1103,7 +1178,7 @@ class Meters(object):
         return datastructures.SortedDict([
             ('volume', {
                 'label': '',
-                'description': _("Duration of volume"),
+                'description': _("Existence of volume"),
             }),
             ('volume.size', {
                 'label': '',
@@ -1112,9 +1187,9 @@ class Meters(object):
         ])
 
     def _get_swift_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
-        That will be used for augmenting the Ceilometer meter
+        That will be used for augmenting the Ceilometer meter.
         """
 
         # TODO(lsmola) Unless the Ceilometer will provide the information
@@ -1149,9 +1224,9 @@ class Meters(object):
         ])
 
     def _get_kwapi_meters_info(self):
-        """Returns additional info for each meter
+        """Returns additional info for each meter.
 
-        That will be used for augmenting the Ceilometer meter
+        That will be used for augmenting the Ceilometer meter.
         """
 
         # TODO(lsmola) Unless the Ceilometer will provide the information
@@ -1166,5 +1241,66 @@ class Meters(object):
             ('power', {
                 'label': '',
                 'description': _("Power consumption"),
+            }),
+        ])
+
+    def _get_ipmi_meters_info(self):
+        """Returns additional info for each meter
+
+        That will be used for augmenting the Ceilometer meter
+        """
+
+        # TODO(lsmola) Unless the Ceilometer will provide the information
+        # below, I need to define it as a static here. I will be joining this
+        # to info that I am able to obtain from Ceilometer meters, hopefully
+        # some day it will be supported all.
+        return datastructures.SortedDict([
+            ('hardware.ipmi.node.power', {
+                'label': '',
+                'description': _("System Current Power"),
+            }),
+            ('hardware.ipmi.fan', {
+                'label': '',
+                'description': _("Fan RPM"),
+            }),
+            ('hardware.ipmi.temperature', {
+                'label': '',
+                'description': _("Sensor Temperature Reading"),
+            }),
+            ('hardware.ipmi.current', {
+                'label': '',
+                'description': _("Sensor Current Reading"),
+            }),
+            ('hardware.ipmi.voltage', {
+                'label': '',
+                'description': _("Sensor Voltage Reading"),
+            }),
+            ('hardware.ipmi.node.inlet_temperature', {
+                'label': '',
+                'description': _("System Inlet Temperature Reading"),
+            }),
+            ('hardware.ipmi.node.outlet_temperature', {
+                'label': '',
+                'description': _("System Outlet Temperature Reading"),
+            }),
+            ('hardware.ipmi.node.airflow', {
+                'label': '',
+                'description': _("System Airflow Reading"),
+            }),
+            ('hardware.ipmi.node.cups', {
+                'label': '',
+                'description': _("System CUPS Reading"),
+            }),
+            ('hardware.ipmi.node.cpu_util', {
+                'label': '',
+                'description': _("System CPU Utility Reading"),
+            }),
+            ('hardware.ipmi.node.mem_util', {
+                'label': '',
+                'description': _("System Memory Utility Reading"),
+            }),
+            ('hardware.ipmi.node.io_util', {
+                'label': '',
+                'description': _("System IO Utility Reading"),
             }),
         ])

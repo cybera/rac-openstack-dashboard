@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -37,6 +35,10 @@ from openstack_dashboard.dashboards.project.images.images \
 class IndexView(tables.DataTableView):
     table_class = images_tables.ImagesTable
     template_name = 'project/images/index.html'
+    page_title = _("Images")
+
+    def has_prev_data(self, table):
+        return getattr(self, "_prev_%s" % table.name, False)
 
     def has_more_data(self, table):
         return getattr(self, "_more_%s" % table.name, False)
@@ -45,9 +47,9 @@ class IndexView(tables.DataTableView):
         marker = self.request.GET.get(
             images_tables.ImagesTable._meta.pagination_param, None)
         try:
-            (images,
-             self._more_images) = api.glance.image_list_detailed(self.request,
-                                                                 marker=marker)
+            (images, self._more, self._prev) = api.glance.image_list_detailed(
+                self.request, marker=marker)
+
         except Exception:
             images = []
             exceptions.handle(self.request, _("Unable to retrieve images."))

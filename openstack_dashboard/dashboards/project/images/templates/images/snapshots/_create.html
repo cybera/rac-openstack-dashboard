@@ -16,11 +16,11 @@
 </div>
 <div class="right">
     <h3>{% trans "Description:" %}</h3>
-    <p>{% trans "Snapshots preserve the disk state of a running instance." %}</p>
+    <p>{% trans "A snapshot is an image which preserves the disk state of a running instance." %}</p>
 </div>
 {% endblock %}
 
 {% block modal-footer %}
      <input class="btn btn-primary pull-right" type="submit" value="{% trans "Create Snapshot" %}" />
-     <a href="{% url 'horizon:project:images:index' %}" class="btn secondary cancel close">{% trans "Cancel" %}</a>
+     <a href="{% url 'horizon:project:images:index' %}" class="btn btn-default secondary cancel close">{% trans "Cancel" %}</a>
 {% endblock %}

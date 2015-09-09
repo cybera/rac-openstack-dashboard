@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -98,11 +96,12 @@ class CeilometerApiTests(test.APITestCase):
         for m in ret_list:
             self.assertIsInstance(m, api.ceilometer.Meter)
 
-        self.assertEqual(len(ret_list), 3)
+        self.assertEqual(3, len(ret_list))
 
-        self.assertEqual(ret_list[0].name, "disk.read.bytes")
-        self.assertEqual(ret_list[1].name, "disk.write.bytes")
-        self.assertEqual(ret_list[2].name, "instance")
+        names = ["disk.read.bytes", "disk.write.bytes", "instance"]
+        for ret in ret_list:
+            self.assertIn(ret.name, names)
+            names.remove(ret.name)
 
     @test.create_stubs({api.nova: ('flavor_list',),
                         })
@@ -120,15 +119,15 @@ class CeilometerApiTests(test.APITestCase):
         meters_object = api.ceilometer.Meters(self.request)
         ret_list = meters_object.list_all(only_meters=["disk.read.bytes"])
 
-        self.assertEqual(len(ret_list), 1)
-        self.assertEqual(ret_list[0].name, "disk.read.bytes")
+        self.assertEqual(1, len(ret_list))
+        self.assertEqual("disk.read.bytes", ret_list[0].name)
 
         ret_list = meters_object.list_all(only_meters=["disk.read.bytes",
                                                        "instance"])
 
-        self.assertEqual(len(ret_list), 2)
-        self.assertEqual(ret_list[0].name, "disk.read.bytes")
-        self.assertEqual(ret_list[1].name, "instance")
+        self.assertEqual(2, len(ret_list))
+        self.assertEqual("disk.read.bytes", ret_list[0].name)
+        self.assertEqual("instance", ret_list[1].name)
 
     @test.create_stubs({api.nova: ('flavor_list',),
                         })
@@ -147,24 +146,25 @@ class CeilometerApiTests(test.APITestCase):
         ret_list = meters_object.list_all(except_meters=["disk.write.bytes",
                                                          "instance"])
 
-        self.assertEqual(len(ret_list), 1)
-        self.assertEqual(ret_list[0].name, "disk.read.bytes")
+        self.assertEqual(1, len(ret_list))
+        self.assertEqual("disk.read.bytes", ret_list[0].name)
 
         ret_list = meters_object.list_all(except_meters=["disk.write.bytes"])
 
         self.assertEqual(len(ret_list), 2)
-        self.assertEqual(ret_list[0].name, "disk.read.bytes")
-        self.assertEqual(ret_list[1].name, "instance")
+        names = ["disk.read.bytes", "instance"]
 
-    #TODO(lsmola)
-    #test resource aggregates
+        for ret in ret_list:
+            self.assertIn(ret.name, names)
+            names.remove(ret.name)
+
+    # TODO(lsmola) Test resource aggregates.
 
     @test.create_stubs({api.ceilometer.CeilometerUsage: ("get_user",
                                                          "get_tenant")})
     def test_global_data_get(self):
         class TempUsage(api.base.APIResourceWrapper):
-            _attrs = ["id", "tenant", "user", "resource", "fake_meter_1",
-                      "fake_meter_2"]
+            _attrs = ["id", "tenant", "user", "resource", "get_meter"]
 
             meters = ["fake_meter_1",
                       "fake_meter_2"]
@@ -192,9 +192,9 @@ class CeilometerApiTests(test.APITestCase):
             AndReturn(statistics)
 
         api.ceilometer.CeilometerUsage\
-                .get_user(IsA(str)).AndReturn(user)
+            .get_user(IsA(str)).AndReturn(user)
         api.ceilometer.CeilometerUsage\
-                .get_tenant(IsA(str)).AndReturn(tenant)
+            .get_tenant(IsA(str)).AndReturn(tenant)
 
         self.mox.ReplayAll()
 
@@ -204,16 +204,17 @@ class CeilometerApiTests(test.APITestCase):
             used_cls=TempUsage, query=["fake_query"], with_statistics=True)
 
         first = data[0]
-        self.assertEqual(first.id, 'fake_project_id__fake_user_id__'
-                                   'fake_resource_id')
-        self.assertEqual(first.user.name, 'user')
-        self.assertEqual(first.tenant.name, 'test_tenant')
-        self.assertEqual(first.resource, 'fake_resource_id')
-        self.assertEqual(first.fake_meter_1, 9)
-        self.assertEqual(first.fake_meter_2, 9)
-
+        self.assertEqual('fake_project_id__fake_user_id__'
+                         'fake_resource_id',
+                         first.id)
+        self.assertEqual('user', first.user.name)
+        self.assertEqual('test_tenant', first.tenant.name)
+        self.assertEqual('fake_resource_id', first.resource)
+        self.assertEqual(9, first.get_meter('fake_meter_1'),)
+        self.assertEqual(9, first.get_meter('fake_meter_2'),)
+        self.assertEqual(2, len(first.meters))
         # check that only one resource is returned
-        self.assertEqual(len(data), 1)
+        self.assertEqual(1, len(data))
 
     @test.create_stubs({api.ceilometer.CeilometerUsage: ("get_user",
                                                          "get_tenant")})
@@ -237,9 +238,9 @@ class CeilometerApiTests(test.APITestCase):
         ceilometerclient.resources.list(q=IsA(list)).AndReturn(resources)
 
         api.ceilometer.CeilometerUsage\
-                .get_user(IsA(str)).MultipleTimes().AndReturn(user)
+            .get_user(IsA(str)).MultipleTimes().AndReturn(user)
         api.ceilometer.CeilometerUsage\
-                .get_tenant(IsA(str)).MultipleTimes().AndReturn(tenant)
+            .get_tenant(IsA(str)).MultipleTimes().AndReturn(tenant)
 
         self.mox.ReplayAll()
 
@@ -249,23 +250,23 @@ class CeilometerApiTests(test.APITestCase):
             used_cls=TempUsage, query=["fake_query"], with_statistics=False)
 
         first = data[0]
-        self.assertEqual(first.id, 'fake_project_id__fake_user_id__'
-                                   'fake_resource_id')
-        self.assertEqual(first.user.name, 'user')
-        self.assertEqual(first.tenant.name, 'test_tenant')
-        self.assertEqual(first.resource, 'fake_resource_id')
+        self.assertEqual('fake_project_id__fake_user_id__'
+                         'fake_resource_id',
+                         first.id)
+        self.assertEqual('user', first.user.name)
+        self.assertEqual('test_tenant', first.tenant.name)
+        self.assertEqual('fake_resource_id', first.resource)
 
         self.assertRaises(AttributeError, getattr, first, 'fake_meter_1')
         self.assertRaises(AttributeError, getattr, first, 'fake_meter_2')
 
-        self.assertEqual(len(data), len(resources))
+        self.assertEqual(len(resources), len(data))
 
     @test.create_stubs({api.ceilometer.CeilometerUsage: ("get_user",
                                                          "get_tenant")})
     def test_global_data_get_all_statistic_data(self):
         class TempUsage(api.base.APIResourceWrapper):
-            _attrs = ["id", "tenant", "user", "resource", "fake_meter_1",
-                      "fake_meter_2"]
+            _attrs = ["id", "tenant", "user", "resource", "get_meter", ]
 
             meters = ["fake_meter_1",
                       "fake_meter_2"]
@@ -290,9 +291,9 @@ class CeilometerApiTests(test.APITestCase):
             AndReturn(statistics)
 
         api.ceilometer.CeilometerUsage\
-                .get_user(IsA(str)).MultipleTimes().AndReturn(user)
+            .get_user(IsA(str)).MultipleTimes().AndReturn(user)
         api.ceilometer.CeilometerUsage\
-                .get_tenant(IsA(str)).MultipleTimes().AndReturn(tenant)
+            .get_tenant(IsA(str)).MultipleTimes().AndReturn(tenant)
 
         self.mox.ReplayAll()
 
@@ -302,15 +303,18 @@ class CeilometerApiTests(test.APITestCase):
             used_cls=TempUsage, query=["fake_query"], with_statistics=True)
 
         first = data[0]
-        self.assertEqual(first.id, 'fake_project_id__fake_user_id__'
-                                   'fake_resource_id')
-        self.assertEqual(first.user.name, 'user')
-        self.assertEqual(first.tenant.name, 'test_tenant')
-        self.assertEqual(first.resource, 'fake_resource_id')
+        self.assertEqual('fake_project_id__fake_user_id__'
+                         'fake_resource_id',
+                         first.id)
+        self.assertEqual('user', first.user.name)
+        self.assertEqual('test_tenant', first.tenant.name)
+        self.assertEqual('fake_resource_id', first.resource)
 
         statistic_obj = api.ceilometer.Statistic(statistics[0])
         # check that it returns whole statistic object
-        self.assertEqual(vars(first.fake_meter_1[0]), vars(statistic_obj))
-        self.assertEqual(vars(first.fake_meter_2[0]), vars(statistic_obj))
+        self.assertEqual(vars(first.get_meter('fake_meter_1')[0]),
+                         vars(statistic_obj))
+        self.assertEqual(vars(first.get_meter('fake_meter_2')[0]),
+                         vars(statistic_obj))
 
-        self.assertEqual(len(data), len(resources))
+        self.assertEqual(len(resources), len(data))

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 B1 Systems GmbH
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -23,7 +21,7 @@ from openstack_dashboard.dashboards.admin import dashboard
 class Hypervisors(horizon.Panel):
     name = _("Hypervisors")
     slug = 'hypervisors'
-    permissions = ('openstack.roles.admin',)
+    permissions = ('openstack.roles.admin', 'openstack.services.compute')
 
 
 dashboard.Admin.register(Hypervisors)

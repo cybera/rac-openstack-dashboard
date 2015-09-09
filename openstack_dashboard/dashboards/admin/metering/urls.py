@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -12,12 +10,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from django.conf.urls import patterns  # noqa
-from django.conf.urls import url  # noqa
+from django.conf.urls import patterns
+from django.conf.urls import url
 
 from openstack_dashboard.dashboards.admin.metering import views
 
-urlpatterns = patterns('openstack_dashboard.dashboards.admin.metering.views',
+urlpatterns = patterns(
+    'openstack_dashboard.dashboards.admin.metering.views',
     url(r'^$', views.IndexView.as_view(), name='index'),
+    url(r'^create/$', views.CreateUsageReport.as_view(), name='create'),
     url(r'^samples$', views.SamplesView.as_view(), name='samples'),
-    url(r'^report$', views.ReportView.as_view(), name='report'))
+    url(r'^report/csv$', views.CsvReportView.as_view(), name='csvreport'))

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -28,12 +26,20 @@ LOG = logging.getLogger(__name__)
 
 
 resource_urls = {
+    "AWS::AutoScaling::AutoScalingGroup": {
+        'link': 'horizon:project:stacks:detail'},
+    "AWS::CloudFormation::Stack": {
+        'link': 'horizon:project:stacks:detail'},
     "AWS::EC2::Instance": {
         'link': 'horizon:project:instances:detail'},
+    "AWS::EC2::InternetGateway": {
+        'link': 'horizon:project:networks:ports:detail'},
     "AWS::EC2::NetworkInterface": {
         'link': 'horizon:project:networks:ports:detail'},
     "AWS::EC2::RouteTable": {
         'link': 'horizon:project:routers:detail'},
+    "AWS::EC2::SecurityGroup": {
+        'link': 'horizon:project:access_and_security:index'},
     "AWS::EC2::Subnet": {
         'link': 'horizon:project:networks:subnets:detail'},
     "AWS::EC2::Volume": {
@@ -42,14 +48,66 @@ resource_urls = {
         'link': 'horizon:project:networks:detail'},
     "AWS::S3::Bucket": {
         'link': 'horizon:project:containers:index'},
-    "OS::Quantum::Net": {
+    "OS::Cinder::Volume": {
+        'link': 'horizon:project:volumes:volumes:detail'},
+    "OS::Heat::AccessPolicy": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::AutoScalingGroup": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::CloudConfig": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Neutron::Firewall": {
+        'link': 'horizon:project:firewalls:firewalldetails'},
+    "OS::Neutron::FirewallPolicy": {
+        'link': 'horizon:project:firewalls:policydetails'},
+    "OS::Neutron::FirewallRule": {
+        'link': 'horizon:project:firewalls:ruledetails'},
+    "OS::Heat::HARestarter": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::InstanceGroup": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::MultipartMime": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::ResourceGroup": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::SoftwareConfig": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::StructuredConfig": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::StructuredDeployment": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::Stack": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::WaitCondition": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Heat::WaitConditionHandle": {
+        'link': 'horizon:project:stacks:detail'},
+    "OS::Neutron::HealthMonitor": {
+        'link': 'horizon:project:loadbalancers:monitordetails'},
+    "OS::Neutron::IKEPolicy": {
+        'link': 'horizon:project:vpn:ikepolicydetails'},
+    "OS::Neutron::IPsecPolicy": {
+        'link': 'horizon:project:vpn:ipsecpolicydetails'},
+    "OS::Neutron::IPsecSiteConnection": {
+        'link': 'horizon:project:vpn:ipsecsiteconnectiondetails'},
+    "OS::Neutron::Net": {
         'link': 'horizon:project:networks:detail'},
-    "OS::Quantum::Port": {
+    "OS::Neutron::Pool": {
+        'link': 'horizon:project:loadbalancers:pooldetails'},
+    "OS::Neutron::PoolMember": {
+        'link': 'horizon:project:loadbalancers:memberdetails'},
+    "OS::Neutron::Port": {
         'link': 'horizon:project:networks:ports:detail'},
-    "OS::Quantum::Router": {
+    "OS::Neutron::Router": {
         'link': 'horizon:project:routers:detail'},
-    "OS::Quantum::Subnet": {
+    "OS::Neutron::Subnet": {
         'link': 'horizon:project:networks:subnets:detail'},
+    "OS::Neutron::VPNService": {
+        'link': 'horizon:project:vpn:vpnservicedetails'},
+    "OS::Nova::KeyPair": {
+        'link': 'horizon:project:access_and_security:index'},
+    "OS::Nova::Server": {
+        'link': 'horizon:project:instances:detail'},
     "OS::Swift::Container": {
         'link': 'horizon:project:containers:index',
         'format_pattern': '%s' + swift.FOLDER_DELIMITER},

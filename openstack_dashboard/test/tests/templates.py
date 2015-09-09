@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright (c) 2012 OpenStack Foundation
 # All Rights Reserved.
 #
@@ -17,6 +15,7 @@
 
 from django import template
 from django.template import loader
+
 from openstack_dashboard.test import helpers as test
 
 

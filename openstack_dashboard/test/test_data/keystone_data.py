@@ -25,6 +25,7 @@ from keystoneclient.v2_0 import tenants
 from keystoneclient.v2_0 import users
 from keystoneclient.v3 import domains
 from keystoneclient.v3 import groups
+from keystoneclient.v3 import role_assignments
 
 from openstack_auth import user as auth_user
 
@@ -59,6 +60,18 @@ SERVICE_CATALOG = [
           "adminURL": "http://admin.nova.example.com:8776/v1",
           "internalURL": "http://int.nova.example.com:8776/v1",
           "publicURL": "http://public.nova.example.com:8776/v1"}]},
+    {"type": "volumev2",
+     "name": "cinderv2",
+     "endpoints_links": [],
+     "endpoints": [
+         {"region": "RegionOne",
+          "adminURL": "http://admin.nova.example.com:8776/v2",
+          "internalURL": "http://int.nova.example.com:8776/v2",
+          "publicURL": "http://public.nova.example.com:8776/v2"},
+         {"region": "RegionTwo",
+          "adminURL": "http://admin.nova.example.com:8776/v2",
+          "internalURL": "http://int.nova.example.com:8776/v2",
+          "publicURL": "http://public.nova.example.com:8776/v2"}]},
     {"type": "image",
      "name": "glance",
      "endpoints_links": [],
@@ -122,7 +135,15 @@ SERVICE_CATALOG = [
          {"region": "RegionOne",
           "adminURL": "http://admin.trove.example.com:8779/v1.0",
           "publicURL": "http://public.trove.example.com:8779/v1.0",
-          "internalURL": "http://int.trove.example.com:8779/v1.0"}]}
+          "internalURL": "http://int.trove.example.com:8779/v1.0"}]},
+    {"type": "data-processing",
+     "name": "Sahara",
+     "endpoints_links": [],
+     "endpoints": [
+         {"region": "RegionOne",
+          "adminURL": "http://admin.sahara.example.com:8386/v1.1",
+          "publicURL": "http://public.sahara.example.com:8386/v1.1",
+          "internalURL": "http://int.sahara.example.com:8386/v1.1"}]}
 ]
 
 
@@ -135,6 +156,7 @@ def data(TEST):
     TEST.users = utils.TestDataContainer()
     TEST.groups = utils.TestDataContainer()
     TEST.tenants = utils.TestDataContainer()
+    TEST.role_assignments = utils.TestDataContainer()
     TEST.roles = utils.TestDataContainer()
     TEST.ec2 = utils.TestDataContainer()
 
@@ -211,30 +233,79 @@ def data(TEST):
     TEST.user.service_catalog = copy.deepcopy(SERVICE_CATALOG)
 
     group_dict = {'id': "1",
-                 'name': 'group_one',
-                 'description': 'group one description',
-                 'project_id': '1',
-                 'domain_id': '1'}
+                  'name': 'group_one',
+                  'description': 'group one description',
+                  'project_id': '1',
+                  'domain_id': '1'}
     group = groups.Group(groups.GroupManager(None), group_dict)
     group_dict = {'id': "2",
-                 'name': 'group_two',
-                 'description': 'group two description',
-                 'project_id': '1',
-                 'domain_id': '1'}
+                  'name': 'group_two',
+                  'description': 'group two description',
+                  'project_id': '1',
+                  'domain_id': '1'}
     group2 = groups.Group(groups.GroupManager(None), group_dict)
     group_dict = {'id': "3",
-                 'name': 'group_three',
-                 'description': 'group three description',
-                 'project_id': '1',
-                 'domain_id': '1'}
+                  'name': 'group_three',
+                  'description': 'group three description',
+                  'project_id': '1',
+                  'domain_id': '1'}
     group3 = groups.Group(groups.GroupManager(None), group_dict)
     group_dict = {'id': "4",
-                 'name': 'group_four',
-                 'description': 'group four description',
-                 'project_id': '2',
-                 'domain_id': '2'}
+                  'name': 'group_four',
+                  'description': 'group four description',
+                  'project_id': '2',
+                  'domain_id': '2'}
     group4 = groups.Group(groups.GroupManager(None), group_dict)
     TEST.groups.add(group, group2, group3, group4)
+
+    role_assignments_dict = {'user': {'id': '1'},
+                             'role': {'id': '1'},
+                             'scope': {'project': {'id': '1'}}}
+    proj_role_assignment1 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'user': {'id': '2'},
+                             'role': {'id': '2'},
+                             'scope': {'project': {'id': '1'}}}
+    proj_role_assignment2 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'group': {'id': '1'},
+                             'role': {'id': '2'},
+                             'scope': {'project': {'id': '1'}}}
+    proj_role_assignment3 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'user': {'id': '3'},
+                             'role': {'id': '2'},
+                             'scope': {'project': {'id': '1'}}}
+    proj_role_assignment4 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'user': {'id': '1'},
+                             'role': {'id': '1'},
+                             'scope': {'domain': {'id': '1'}}}
+    domain_role_assignment1 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'user': {'id': '2'},
+                             'role': {'id': '2'},
+                             'scope': {'domain': {'id': '1'}}}
+    domain_role_assignment2 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'group': {'id': '1'},
+                             'role': {'id': '2'},
+                             'scope': {'domain': {'id': '1'}}}
+    domain_role_assignment3 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    role_assignments_dict = {'user': {'id': '3'},
+                             'role': {'id': '2'},
+                             'scope': {'domain': {'id': '1'}}}
+    domain_role_assignment4 = role_assignments.RoleAssignment(
+        role_assignments.RoleAssignmentManager, role_assignments_dict)
+    TEST.role_assignments.add(proj_role_assignment1,
+                              proj_role_assignment2,
+                              proj_role_assignment3,
+                              proj_role_assignment4,
+                              domain_role_assignment1,
+                              domain_role_assignment2,
+                              domain_role_assignment3,
+                              domain_role_assignment4)
 
     tenant_dict = {'id': "1",
                    'name': 'test_tenant',
@@ -305,5 +376,6 @@ def data(TEST):
     TEST.tokens.unscoped_token = unscoped_token
 
     access_secret = ec2.EC2(ec2.CredentialsManager, {"access": "access",
-                                                     "secret": "secret"})
+                                                     "secret": "secret",
+                                                     "tenant_id": tenant.id})
     TEST.ec2.add(access_secret)

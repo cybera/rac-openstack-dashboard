@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -42,7 +40,7 @@ IMAGES_INDEX_URL = reverse('horizon:project:images:index')
 
 class CreateImageFormTests(test.TestCase):
     def test_no_location_or_file(self):
-        """The form will not be valid if both copy_from and image_file are not
+        """The form will not be valid if both image_url and image_file are not
         provided.
         """
         post = {
@@ -70,50 +68,97 @@ class CreateImageFormTests(test.TestCase):
         self.assertNotIn('file', source_type_dict)
 
 
-class ImageViewTests(test.TestCase):
-    def test_image_create_get(self):
-        url = reverse('horizon:project:images:images:create')
-        res = self.client.get(url)
-        self.assertTemplateUsed(res,
-                            'project/images/images/create.html')
+class UpdateImageFormTests(test.TestCase):
+    def test_is_format_field_editable(self):
+        form = forms.UpdateImageForm({})
+        disk_format = form.fields['disk_format']
+        self.assertFalse(disk_format.widget.attrs.get('readonly', False))
 
-    @test.create_stubs({api.glance: ('image_create',)})
-    def test_image_create_post_copy_from(self):
+    @test.create_stubs({api.glance: ('image_get',)})
+    def test_image_update(self):
+        image = self.images.first()
+        api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
+           .AndReturn(image)
+        self.mox.ReplayAll()
+
+        url = reverse('horizon:project:images:images:update',
+                      args=[image.id])
+        res = self.client.get(url)
+        self.assertNoFormErrors(res)
+        self.assertEqual(res.context['image'].disk_format,
+                         image.disk_format)
+
+    @test.create_stubs({api.glance: ('image_update', 'image_get')})
+    def test_image_update_post(self):
+        image = self.images.first()
         data = {
             'name': u'Ubuntu 11.10',
+            'image_id': str(image.id),
             'description': u'Login with admin/admin',
             'source_type': u'url',
-            'copy_from': u'http://cloud-images.ubuntu.com/releases/'
+            'image_url': u'http://cloud-images.ubuntu.com/releases/'
                          u'oneiric/release/ubuntu-11.10-server-cloudimg'
                          u'-amd64-disk1.img',
             'disk_format': u'qcow2',
             'architecture': u'x86-64',
             'minimum_disk': 15,
             'minimum_ram': 512,
-            'is_public': True,
+            'is_public': False,
             'protected': False,
-            'method': 'CreateImageForm'}
-
-        api.glance.image_create(IsA(http.HttpRequest),
-                                container_format="bare",
-                                copy_from=data['copy_from'],
+            'method': 'UpdateImageForm'}
+        api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
+           .AndReturn(image)
+        api.glance.image_update(IsA(http.HttpRequest),
+                                image.id,
+                                is_public=data['is_public'],
+                                protected=data['protected'],
                                 disk_format=data['disk_format'],
-                                is_public=True,
-                                protected=False,
-                                min_disk=data['minimum_disk'],
+                                container_format="bare",
+                                name=data['name'],
                                 min_ram=data['minimum_ram'],
-                                properties={
-                                    'description': data['description'],
-                                    'architecture': data['architecture']},
-                                name=data['name']). \
-                        AndReturn(self.images.first())
+                                min_disk=data['minimum_disk'],
+                                properties={'description': data['description'],
+                                            'architecture':
+                                            data['architecture']},
+                                purge_props=False).AndReturn(image)
         self.mox.ReplayAll()
-
-        url = reverse('horizon:project:images:images:create')
+        url = reverse('horizon:project:images:images:update',
+                      args=[image.id])
         res = self.client.post(url, data)
-
         self.assertNoFormErrors(res)
         self.assertEqual(res.status_code, 302)
+
+
+class ImageViewTests(test.TestCase):
+    def test_image_create_get(self):
+        url = reverse('horizon:project:images:images:create')
+        res = self.client.get(url)
+        self.assertTemplateUsed(res,
+                                'project/images/images/create.html')
+
+    @test.create_stubs({api.glance: ('image_create',)})
+    def test_image_create_post_copy_from(self):
+        data = {
+            'source_type': u'url',
+            'image_url': u'http://cloud-images.ubuntu.com/releases/'
+                         u'oneiric/release/ubuntu-11.10-server-cloudimg'
+                         u'-amd64-disk1.img',
+            'is_copying': True}
+
+        api_data = {'copy_from': data['image_url']}
+        self._test_image_create(data, api_data)
+
+    @test.create_stubs({api.glance: ('image_create',)})
+    def test_image_create_post_location(self):
+        data = {
+            'source_type': u'url',
+            'image_url': u'http://cloud-images.ubuntu.com/releases/'
+                         u'oneiric/release/ubuntu-11.10-server-cloudimg'
+                         u'-amd64-disk1.img',
+            'is_copying': False}
+
+        api_data = {'location': data['image_url']}
+        self._test_image_create(data, api_data)
 
     @test.create_stubs({api.glance: ('image_create',)})
     def test_image_create_post_upload(self):
@@ -121,11 +166,17 @@ class ImageViewTests(test.TestCase):
         temp_file.write('123')
         temp_file.flush()
         temp_file.seek(0)
+
+        data = {'source_type': u'file',
+                'image_file': temp_file}
+
+        api_data = {'data': IsA(InMemoryUploadedFile)}
+        self._test_image_create(data, api_data)
+
+    def _test_image_create(self, extra_form_data, extra_api_data):
         data = {
-            'name': u'Test Image',
+            'name': u'Ubuntu 11.10',
             'description': u'Login with admin/admin',
-            'source_type': u'file',
-            'image_file': temp_file,
             'disk_format': u'qcow2',
             'architecture': u'x86-64',
             'minimum_disk': 15,
@@ -133,20 +184,23 @@ class ImageViewTests(test.TestCase):
             'is_public': True,
             'protected': False,
             'method': 'CreateImageForm'}
+        data.update(extra_form_data)
 
-        api.glance.image_create(IsA(http.HttpRequest),
-                                container_format="bare",
-                                disk_format=data['disk_format'],
-                                is_public=True,
-                                protected=False,
-                                min_disk=data['minimum_disk'],
-                                min_ram=data['minimum_ram'],
-                                properties={
-                                    'description': data['description'],
-                                    'architecture': data['architecture']},
-                                name=data['name'],
-                                data=IsA(InMemoryUploadedFile)). \
-                        AndReturn(self.images.first())
+        api_data = {'container_format': 'bare',
+                    'disk_format': data['disk_format'],
+                    'is_public': True,
+                    'protected': False,
+                    'min_disk': data['minimum_disk'],
+                    'min_ram': data['minimum_ram'],
+                    'properties': {
+                        'description': data['description'],
+                        'architecture': data['architecture']},
+                    'name': data['name']}
+        api_data.update(extra_api_data)
+
+        api.glance.image_create(
+            IsA(http.HttpRequest),
+            **api_data).AndReturn(self.images.first())
         self.mox.ReplayAll()
 
         url = reverse('horizon:project:images:images:create')
@@ -160,17 +214,17 @@ class ImageViewTests(test.TestCase):
         image = self.images.first()
 
         api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
-                                 .AndReturn(self.images.first())
+            .AndReturn(self.images.first())
         self.mox.ReplayAll()
 
         res = self.client.get(reverse('horizon:project:images:images:detail',
                                       args=[image.id]))
 
         self.assertTemplateUsed(res,
-                            'project/images/images/detail.html')
+                                'project/images/images/detail.html')
         self.assertEqual(res.context['image'].name, image.name)
         self.assertEqual(res.context['image'].protected, image.protected)
-        self.assertContains(res, "<h2>Image Details: %s</h2>" % image.name,
+        self.assertContains(res, "<h1>Image Details: %s</h1>" % image.name,
                             1, 200)
 
     @test.create_stubs({api.glance: ('image_get',)})
@@ -178,7 +232,7 @@ class ImageViewTests(test.TestCase):
         image = self.images.list()[8]
 
         api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
-                                 .AndReturn(image)
+            .AndReturn(image)
         self.mox.ReplayAll()
 
         res = self.client.get(reverse('horizon:project:images:images:detail',
@@ -205,14 +259,14 @@ class ImageViewTests(test.TestCase):
         image = self.images.list()[2]
 
         api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
-                                 .AndReturn(image)
+            .AndReturn(image)
         self.mox.ReplayAll()
 
         res = self.client.get(
             reverse('horizon:project:images:images:detail',
-            args=[image.id]))
+                    args=[image.id]))
         self.assertTemplateUsed(res,
-                            'project/images/images/detail.html')
+                                'project/images/images/detail.html')
         self.assertEqual(res.context['image'].protected, image.protected)
 
     @test.create_stubs({api.glance: ('image_get',)})
@@ -220,7 +274,7 @@ class ImageViewTests(test.TestCase):
         image = self.images.first()
 
         api.glance.image_get(IsA(http.HttpRequest), str(image.id)) \
-                  .AndRaise(self.exceptions.glance)
+            .AndRaise(self.exceptions.glance)
         self.mox.ReplayAll()
 
         url = reverse('horizon:project:images:images:detail',
@@ -242,7 +296,7 @@ class ImageViewTests(test.TestCase):
                     args=[image.id]))
 
         self.assertTemplateUsed(res,
-                            'project/images/images/_update.html')
+                                'project/images/images/_update.html')
         self.assertEqual(res.context['image'].name, image.name)
         # Bug 1076216 - is_public checkbox not being set correctly
         self.assertContains(res, "<input type='checkbox' id='id_public'"
@@ -259,7 +313,7 @@ class OwnerFilterTests(test.TestCase):
 
     @override_settings(IMAGES_LIST_FILTER_TENANTS=[{'name': 'Official',
                                                     'tenant': 'officialtenant',
-                                                    'icon': 'icon-ok'}])
+                                                    'icon': 'fa-check'}])
     def test_filter(self):
         self.mox.ReplayAll()
         all_images = self.images.list()
@@ -288,9 +342,10 @@ class OwnerFilterTests(test.TestCase):
         if filter_string == 'public':
             return filter(lambda im: im.is_public, images)
         if filter_string == 'shared':
-            return filter(lambda im: not im.is_public and
-                                     im.owner != my_tenant_id and
-                                     im.owner not in special, images)
+            return filter(lambda im: (not im.is_public and
+                                      im.owner != my_tenant_id and
+                                      im.owner not in special),
+                          images)
         if filter_string == 'project':
             filter_string = my_tenant_id
         return filter(lambda im: im.owner == filter_string, images)

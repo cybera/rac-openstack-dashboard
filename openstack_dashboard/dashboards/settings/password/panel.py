@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Centrin Data Systems Ltd.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -24,6 +22,7 @@ from openstack_dashboard.dashboards.settings import dashboard
 class PasswordPanel(horizon.Panel):
     name = _("Change Password")
     slug = 'password'
+    policy_rules = (("identity", "identity:change_password"),)
 
 
 dashboard.Settings.register(PasswordPanel)

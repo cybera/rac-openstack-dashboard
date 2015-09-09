@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -61,11 +59,13 @@ def rdp(args, **kvargs):
 
 class AdminUpdateView(views.UpdateView):
     workflow_class = update_instance.AdminUpdateInstance
+    success_url = reverse_lazy("horizon:admin:instances:index")
 
 
 class AdminIndexView(tables.DataTableView):
     table_class = project_tables.AdminInstancesTable
     template_name = 'admin/instances/index.html'
+    page_title = _("Instances")
 
     def has_more_data(self, table):
         return self._more
@@ -74,11 +74,29 @@ class AdminIndexView(tables.DataTableView):
         instances = []
         marker = self.request.GET.get(
             project_tables.AdminInstancesTable._meta.pagination_param, None)
+        search_opts = self.get_filters({'marker': marker, 'paginate': True})
+        # Gather our tenants to correlate against IDs
+        try:
+            tenants, has_more = api.keystone.tenant_list(self.request)
+        except Exception:
+            tenants = []
+            msg = _('Unable to retrieve instance project information.')
+            exceptions.handle(self.request, msg)
+
+        if 'project' in search_opts:
+            ten_filter_ids = [t.id for t in tenants
+                              if t.name == search_opts['project']]
+            del search_opts['project']
+            if len(ten_filter_ids) > 0:
+                search_opts['tenant_id'] = ten_filter_ids[0]
+            else:
+                self._more = False
+                return []
+
         try:
             instances, self._more = api.nova.server_list(
                 self.request,
-                search_opts={'marker': marker,
-                             'paginate': True},
+                search_opts=search_opts,
                 all_tenants=True)
         except Exception:
             self._more = False
@@ -86,7 +104,8 @@ class AdminIndexView(tables.DataTableView):
                               _('Unable to retrieve instance list.'))
         if instances:
             try:
-                api.network.servers_update_addresses(self.request, instances)
+                api.network.servers_update_addresses(self.request, instances,
+                                                     all_tenants=True)
             except Exception:
                 exceptions.handle(
                     self.request,
@@ -99,14 +118,6 @@ class AdminIndexView(tables.DataTableView):
             except Exception:
                 # If fails to retrieve flavor list, creates an empty list.
                 flavors = []
-
-            # Gather our tenants to correlate against IDs
-            try:
-                tenants, has_more = api.keystone.tenant_list(self.request)
-            except Exception:
-                tenants = []
-                msg = _('Unable to retrieve instance project information.')
-                exceptions.handle(self.request, msg)
 
             full_flavors = SortedDict([(f.id, f) for f in flavors])
             tenant_dict = SortedDict([(t.id, t) for t in tenants])
@@ -128,12 +139,22 @@ class AdminIndexView(tables.DataTableView):
                 inst.tenant_name = getattr(tenant, "name", None)
         return instances
 
+    def get_filters(self, filters):
+        filter_field = self.table.get_filter_field()
+        filter_action = self.table._meta._filter_action
+        if filter_action.is_api_filter(filter_field):
+            filter_string = self.table.get_filter_string()
+            if filter_field and filter_string:
+                filters[filter_field] = filter_string
+        return filters
+
 
 class LiveMigrateView(forms.ModalFormView):
     form_class = project_forms.LiveMigrateForm
     template_name = 'admin/instances/live_migrate.html'
     context_object_name = 'instance'
     success_url = reverse_lazy("horizon:admin:instances:index")
+    page_title = _("Live Migrate")
 
     def get_context_data(self, **kwargs):
         context = super(LiveMigrateView, self).get_context_data(**kwargs)
@@ -143,10 +164,10 @@ class LiveMigrateView(forms.ModalFormView):
     @memoized.memoized_method
     def get_hosts(self, *args, **kwargs):
         try:
-            return api.nova.hypervisor_list(self.request)
+            return api.nova.host_list(self.request)
         except Exception:
             redirect = reverse("horizon:admin:instances:index")
-            msg = _('Unable to retrieve hypervisor information.')
+            msg = _('Unable to retrieve host information.')
             exceptions.handle(self.request, msg, redirect=redirect)
 
     @memoized.memoized_method

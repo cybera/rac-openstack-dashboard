@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -26,6 +24,8 @@ Views for managing floating IPs.
 from django.core.urlresolvers import reverse_lazy
 from django.utils.translation import ugettext_lazy as _
 
+from neutronclient.common import exceptions as neutron_exc
+
 from horizon import exceptions
 from horizon import forms
 from horizon import workflows
@@ -45,7 +45,12 @@ class AssociateView(workflows.WorkflowView):
 
 class AllocateView(forms.ModalFormView):
     form_class = project_forms.FloatingIpAllocate
+    form_id = "associate_floating_ip_form"
+    modal_header = _("Allocate Floating IP")
     template_name = 'project/access_and_security/floating_ips/allocate.html'
+    submit_label = _("Allocate IP")
+    submit_url = reverse_lazy(
+        "horizon:project:access_and_security:floating_ips:allocate")
     success_url = reverse_lazy('horizon:project:access_and_security:index')
 
     def get_object_display(self, obj):
@@ -62,6 +67,9 @@ class AllocateView(forms.ModalFormView):
     def get_initial(self):
         try:
             pools = api.network.floating_ip_pools_list(self.request)
+        except neutron_exc.ConnectionFailed:
+            pools = []
+            exceptions.handle(self.request)
         except Exception:
             pools = []
             exceptions.handle(self.request,

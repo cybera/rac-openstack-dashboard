@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -19,8 +17,13 @@ from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
 from horizon import tabs
+from horizon.utils import functions as utils
+
+from openstack_dashboard.dashboards.project.instances \
+    import audit_tables as a_tables
 
 from openstack_dashboard import api
+from openstack_dashboard.dashboards.project.instances import console
 
 
 class OverviewTab(tabs.Tab):
@@ -41,15 +44,17 @@ class LogTab(tabs.Tab):
 
     def get_context_data(self, request):
         instance = self.tab_group.kwargs['instance']
+        log_length = utils.get_log_length(request)
         try:
             data = api.nova.server_console_output(request,
                                                   instance.id,
-                                                  tail_length=35)
+                                                  tail_length=log_length)
         except Exception:
             data = _('Unable to get log for instance "%s".') % instance.id
             exceptions.handle(request, ignore=True)
         return {"instance": instance,
-                "console_log": data}
+                "console_log": data,
+                "log_length": log_length}
 
 
 class ConsoleTab(tabs.Tab):
@@ -60,68 +65,47 @@ class ConsoleTab(tabs.Tab):
 
     def get_context_data(self, request):
         instance = self.tab_group.kwargs['instance']
-        # Currently prefer VNC over SPICE, since noVNC has had much more
-        # testing than spice-html5
         console_type = getattr(settings, 'CONSOLE_TYPE', 'AUTO')
-        if console_type == 'AUTO':
-            try:
-                console = api.nova.server_vnc_console(request, instance.id)
-                console_url = "%s&title=%s(%s)" % (
-                    console.url,
-                    getattr(instance, "name", ""),
-                    instance.id)
-            except Exception:
-                try:
-                    console = api.nova.server_spice_console(request,
-                                                            instance.id)
-                    console_url = "%s&title=%s(%s)" % (
-                        console.url,
-                        getattr(instance, "name", ""),
-                        instance.id)
-                except Exception:
-                    try:
-                        console = api.nova.server_rdp_console(request,
-                                                              instance.id)
-                        console_url = "%s&title=%s(%s)" % (
-                            console.url,
-                            getattr(instance, "name", ""),
-                            instance.id)
-                    except Exception:
-                        console_url = None
-        elif console_type == 'VNC':
-            try:
-                console = api.nova.server_vnc_console(request, instance.id)
-                console_url = "%s&title=%s(%s)" % (
-                    console.url,
-                    getattr(instance, "name", ""),
-                    instance.id)
-            except Exception:
-                console_url = None
-        elif console_type == 'SPICE':
-            try:
-                console = api.nova.server_spice_console(request, instance.id)
-                console_url = "%s&title=%s(%s)" % (
-                    console.url,
-                    getattr(instance, "name", ""),
-                    instance.id)
-            except Exception:
-                console_url = None
-        elif console_type == 'RDP':
-            try:
-                console = api.nova.server_rdp_console(request, instance.id)
-                console_url = "%s&title=%s(%s)" % (
-                    console.url,
-                    getattr(instance, "name", ""),
-                    instance.id)
-            except Exception:
-                console_url = None
-        else:
-            console_url = None
+        console_url = None
+        try:
+            console_type, console_url = console.get_console(
+                request, console_type, instance)
+            # For serial console, the url is different from VNC, etc.
+            # because it does not include parms for title and token
+            if console_type == "SERIAL":
+                console_url = "/project/instances/%s/serial" % (instance.id)
+        except exceptions.NotAvailable:
+            exceptions.handle(request, ignore=True, force_log=True)
 
-        return {'console_url': console_url, 'instance_id': instance.id}
+        return {'console_url': console_url, 'instance_id': instance.id,
+                'console_type': console_type}
+
+    def allowed(self, request):
+        # The ConsoleTab is available if settings.CONSOLE_TYPE is not set at
+        # all, or if it's set to any value other than None or False.
+        return bool(getattr(settings, 'CONSOLE_TYPE', True))
+
+
+class AuditTab(tabs.TableTab):
+    name = _("Action Log")
+    slug = "audit"
+    table_classes = (a_tables.AuditTable,)
+    template_name = "project/instances/_detail_audit.html"
+    preload = False
+
+    def get_audit_data(self):
+        actions = []
+        try:
+            actions = api.nova.instance_action_list(
+                self.request, self.tab_group.kwargs['instance_id'])
+        except Exception:
+            exceptions.handle(self.request,
+                              _('Unable to retrieve instance action list.'))
+
+        return sorted(actions, reverse=True, key=lambda y: y.start_time)
 
 
 class InstanceDetailTabs(tabs.TabGroup):
     slug = "instance_details"
-    tabs = (OverviewTab, LogTab, ConsoleTab)
+    tabs = (OverviewTab, LogTab, ConsoleTab, AuditTab)
     sticky = True

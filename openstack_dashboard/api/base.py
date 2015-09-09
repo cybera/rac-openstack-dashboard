@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -25,6 +23,8 @@ from django.conf import settings
 
 from horizon import exceptions
 
+import six
+
 
 __all__ = ('APIResourceWrapper', 'APIDictWrapper',
            'get_service_from_catalog', 'url_for',)
@@ -43,6 +43,13 @@ class APIVersionManager(object):
         self.preferred = preferred_version
         self._active = None
         self.supported = {}
+        # As a convenience, we can drop in a placeholder for APIs that we
+        # have not yet needed to version. This is useful, for example, when
+        # panels such as the admin metadata_defs wants to check the active
+        # version even though it's not explicitly defined. Previously
+        # this caused a KeyError.
+        if self.preferred:
+            self.supported[self.preferred] = {"version": self.preferred}
 
     @property
     def active(self):
@@ -62,8 +69,25 @@ class APIVersionManager(object):
             # the setting in as a way of overriding the latest available
             # version.
             key = self.preferred
+        # Since we do a key lookup in the supported dict the type matters,
+        # let's ensure people know if they use a string when the key isn't.
+        if isinstance(key, six.string_types):
+            msg = ('The version "%s" specified for the %s service should be '
+                   'either an integer or a float, not a string.' %
+                   (key, self.service_type))
+            raise exceptions.ConfigurationError(msg)
+        # Provide a helpful error message if the specified version isn't in the
+        # supported list.
+        if key not in self.supported:
+            choices = ", ".join(str(k) for k in six.iterkeys(self.supported))
+            msg = ('%s is not a supported API version for the %s service, '
+                   ' choices are: %s' % (key, self.service_type, choices))
+            raise exceptions.ConfigurationError(msg)
         self._active = key
         return self.supported[self._active]
+
+    def clear_active_cache(self):
+        self._active = None
 
 
 class APIResourceWrapper(object):
@@ -93,6 +117,12 @@ class APIResourceWrapper(object):
                                   for attr in self._attrs
                                   if hasattr(self, attr)))
 
+    def to_dict(self):
+        obj = {}
+        for key in self._attrs:
+            obj[key] = getattr(self._apiresource, key, None)
+        return obj
+
 
 class APIDictWrapper(object):
     """Simple wrapper for api dictionaries
@@ -121,18 +151,27 @@ class APIDictWrapper(object):
     def __getitem__(self, item):
         try:
             return getattr(self, item)
-        except AttributeError as e:
+        except (AttributeError, TypeError) as e:
             # caller is expecting a KeyError
             raise KeyError(e)
+
+    def __contains__(self, item):
+        try:
+            return hasattr(self, item)
+        except TypeError:
+            return False
 
     def get(self, item, default=None):
         try:
             return getattr(self, item)
-        except AttributeError:
+        except (AttributeError, TypeError):
             return default
 
     def __repr__(self):
         return "<%s: %s>" % (self.__class__.__name__, self._apidict)
+
+    def to_dict(self):
+        return self._apidict
 
 
 class Quota(object):
@@ -150,7 +189,7 @@ class QuotaSet(Sequence):
     into Quota objects for easier handling/iteration.
 
     `QuotaSet` objects support a mix of `list` and `dict` methods; you can use
-    the bracket notiation (`qs["my_quota"] = 0`) to add new quota values, and
+    the bracket notation (`qs["my_quota"] = 0`) to add new quota values, and
     use the `get` method to retrieve a specific quota, but otherwise it
     behaves much like a list or tuple, particularly in supporting iteration.
     """
@@ -177,7 +216,7 @@ class QuotaSet(Sequence):
 
     def __add__(self, other):
         """Merge another QuotaSet into this one. Existing quotas are
-        not overriden.
+        not overridden.
         """
         if not isinstance(other, QuotaSet):
             msg = "Can only add QuotaSet to QuotaSet, " \
@@ -206,13 +245,15 @@ class QuotaSet(Sequence):
 def get_service_from_catalog(catalog, service_type):
     if catalog:
         for service in catalog:
+            if 'type' not in service:
+                continue
             if service['type'] == service_type:
                 return service
     return None
 
 
 def get_version_from_service(service):
-    if service:
+    if service and service.get('endpoints'):
         endpoint = service['endpoints'][0]
         if 'interface' in endpoint:
             return 3
@@ -230,20 +271,34 @@ ENDPOINT_TYPE_TO_INTERFACE = {
 
 
 def get_url_for_service(service, region, endpoint_type):
+    if 'type' not in service:
+        return None
+
     identity_version = get_version_from_service(service)
-    for endpoint in service['endpoints']:
-        # ignore region for identity
-        if service['type'] == 'identity' or region == endpoint['region']:
-            try:
-                if identity_version < 3:
-                    return endpoint[endpoint_type]
-                else:
-                    interface = \
-                        ENDPOINT_TYPE_TO_INTERFACE.get(endpoint_type, '')
-                    if endpoint['interface'] == interface:
-                        return endpoint['url']
-            except (IndexError, KeyError):
-                return None
+    service_endpoints = service.get('endpoints', [])
+    available_endpoints = [endpoint for endpoint in service_endpoints
+                           if region == _get_endpoint_region(endpoint)]
+    """if we are dealing with the identity service and there is no endpoint
+    in the current region, it is okay to use the first endpoint for any
+    identity service endpoints and we can assume that it is global
+    """
+    if service['type'] == 'identity' and not available_endpoints:
+        available_endpoints = [endpoint for endpoint in service_endpoints]
+
+    for endpoint in available_endpoints:
+        try:
+            if identity_version < 3:
+                return endpoint.get(endpoint_type)
+            else:
+                interface = \
+                    ENDPOINT_TYPE_TO_INTERFACE.get(endpoint_type, '')
+                if endpoint.get('interface') == interface:
+                    return endpoint.get('url')
+        except (IndexError, KeyError):
+            """it could be that the current endpoint just doesn't match the
+            type, continue trying the next one
+            """
+            pass
     return None
 
 
@@ -275,12 +330,26 @@ def is_service_enabled(request, service_type, service_name=None):
                                        service_type)
     if service:
         region = request.user.services_region
-        for endpoint in service['endpoints']:
+        for endpoint in service.get('endpoints', []):
+            if 'type' not in service:
+                continue
             # ignore region for identity
             if service['type'] == 'identity' or \
-               endpoint['region'] == region:
+               _get_endpoint_region(endpoint) == region:
                 if service_name:
-                    return service['name'] == service_name
+                    return service.get('name') == service_name
                 else:
                     return True
     return False
+
+
+def _get_endpoint_region(endpoint):
+    """Common function for getting the region from endpoint.
+
+    In Keystone V3, region has been deprecated in favor of
+    region_id.
+
+    This method provides a way to get region that works for
+    both Keystone V2 and V3.
+    """
+    return endpoint.get('region_id') or endpoint.get('region')

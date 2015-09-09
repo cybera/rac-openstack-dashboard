@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013, Mirantis Inc
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,8 +11,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-# @author: Tatiana Mazur
 
 from openstack_dashboard import api
 from openstack_dashboard.test import helpers as test
@@ -276,7 +272,7 @@ class VPNaasApiTests(test.APITestCase):
     def test_ipsecsiteconnection_get(self):
         ipsecsiteconnection = self.ipsecsiteconnections.first()
         connection_dict = {'ipsec_site_connection':
-                               self.api_ipsecsiteconnections.first()}
+                           self.api_ipsecsiteconnections.first()}
         ikepolicy_dict = {'ikepolicy': self.api_ikepolicies.first()}
         ipsecpolicy_dict = {'ipsecpolicy': self.api_ipsecpolicies.first()}
         vpnservice_dict = {'vpnservice': self.api_vpnservices.first()}
@@ -293,5 +289,5 @@ class VPNaasApiTests(test.APITestCase):
         self.mox.ReplayAll()
 
         ret_val = api.vpn.ipsecsiteconnection_get(self.request,
-            ipsecsiteconnection.id)
+                                                  ipsecsiteconnection.id)
         self.assertIsInstance(ret_val, api.vpn.IPSecSiteConnection)

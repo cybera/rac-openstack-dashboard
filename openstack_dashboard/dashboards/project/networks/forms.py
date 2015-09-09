@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -39,14 +37,17 @@ class UpdateNetwork(forms.SelfHandlingForm):
     network_id = forms.CharField(label=_("ID"),
                                  widget=forms.TextInput(
                                      attrs={'readonly': 'readonly'}))
-    admin_state = forms.BooleanField(label=_("Admin State"), required=False)
+    admin_state = forms.ChoiceField(choices=[(True, _('UP')),
+                                             (False, _('DOWN'))],
+                                    label=_("Admin State"))
     failure_url = 'horizon:project:networks:index'
 
     def handle(self, request, data):
         try:
-            params = {'admin_state_up': data['admin_state'],
+            params = {'admin_state_up': (data['admin_state'] == 'True'),
                       'name': data['name']}
-            network = api.neutron.network_update(request, data['network_id'],
+            network = api.neutron.network_update(request,
+                                                 data['network_id'],
                                                  **params)
             msg = _('Network %s was successfully updated.') % data['name']
             LOG.debug(msg)

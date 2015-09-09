@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -24,10 +22,14 @@ from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.core.urlresolvers import reverse_lazy
 from django.http import HttpResponse  # noqa
-from django.views.generic import TemplateView  # noqa
+from django.utils.translation import ugettext_lazy as _
 from django.views.generic import View  # noqa
 
+from horizon import exceptions
+from horizon import views
+
 from openstack_dashboard import api
+from openstack_dashboard.usage import quotas
 
 from openstack_dashboard.dashboards.project.network_topology.instances \
     import tables as instances_tables
@@ -36,6 +38,8 @@ from openstack_dashboard.dashboards.project.network_topology.ports \
 from openstack_dashboard.dashboards.project.network_topology.routers \
     import tables as routers_tables
 
+from openstack_dashboard.dashboards.project.instances import\
+    console as i_console
 from openstack_dashboard.dashboards.project.instances import\
     views as i_views
 from openstack_dashboard.dashboards.project.instances.workflows import\
@@ -48,12 +52,13 @@ from openstack_dashboard.dashboards.project.routers import\
     views as r_views
 
 
-class NTCreateRouterView (r_views.CreateView):
+class NTCreateRouterView(r_views.CreateView):
     template_name = 'project/network_topology/create_router.html'
     success_url = reverse_lazy("horizon:project:network_topology:index")
+    page_title = _("Create a Router")
 
 
-class NTCreateNetwork (n_workflows.CreateNetwork):
+class NTCreateNetwork(n_workflows.CreateNetwork):
     def get_success_url(self):
         return reverse("horizon:project:network_topology:index")
 
@@ -61,38 +66,82 @@ class NTCreateNetwork (n_workflows.CreateNetwork):
         return reverse("horizon:project:network_topology:index")
 
 
-class NTCreateNetworkView (n_views.CreateView):
+class NTCreateNetworkView(n_views.CreateView):
     workflow_class = NTCreateNetwork
 
 
-class NTLaunchInstance (i_workflows.LaunchInstance):
+class NTLaunchInstance(i_workflows.LaunchInstance):
     success_url = "horizon:project:network_topology:index"
 
 
-class NTLaunchInstanceView (i_views.LaunchInstanceView):
+class NTLaunchInstanceView(i_views.LaunchInstanceView):
     workflow_class = NTLaunchInstance
 
 
-class InstanceView (i_views.IndexView):
+class InstanceView(i_views.IndexView):
     table_class = instances_tables.InstancesTable
     template_name = 'project/network_topology/iframe.html'
 
 
-class RouterView (r_views.IndexView):
+class RouterView(r_views.IndexView):
     table_class = routers_tables.RoutersTable
     template_name = 'project/network_topology/iframe.html'
 
 
-class RouterDetailView (r_views.DetailView):
+class RouterDetailView(r_views.DetailView):
     table_classes = (ports_tables.PortsTable, )
     template_name = 'project/network_topology/iframe.html'
 
+    def get_interfaces_data(self):
+        pass
 
-class NetworkTopologyView (TemplateView):
+
+class NetworkTopologyView(views.HorizonTemplateView):
     template_name = 'project/network_topology/index.html'
+    page_title = _("Network Topology")
+
+    def _has_permission(self, policy):
+        has_permission = True
+        policy_check = getattr(settings, "POLICY_CHECK_FUNCTION", None)
+
+        if policy_check:
+            has_permission = policy_check(policy, self.request)
+
+        return has_permission
+
+    def _quota_exceeded(self, quota):
+        usages = quotas.tenant_quota_usages(self.request)
+        available = usages[quota]['available']
+        return available <= 0
+
+    def get_context_data(self, **kwargs):
+        context = super(NetworkTopologyView, self).get_context_data(**kwargs)
+        network_config = getattr(settings, 'OPENSTACK_NEUTRON_NETWORK', {})
+
+        context['launch_instance_allowed'] = self._has_permission(
+            (("compute", "compute:create"),))
+        context['instance_quota_exceeded'] = self._quota_exceeded('instances')
+        context['create_network_allowed'] = self._has_permission(
+            (("network", "create_network"),))
+        context['network_quota_exceeded'] = self._quota_exceeded('networks')
+        context['create_router_allowed'] = (
+            network_config.get('enable_router', True) and
+            self._has_permission((("network", "create_router"),)))
+        context['router_quota_exceeded'] = self._quota_exceeded('routers')
+        context['console_type'] = getattr(
+            settings, 'CONSOLE_TYPE', 'AUTO')
+        context['show_ng_launch'] = getattr(
+            settings, 'LAUNCH_INSTANCE_NG_ENABLED', False)
+        return context
 
 
 class JSONView(View):
+
+    @property
+    def is_router_enabled(self):
+        network_config = getattr(settings, 'OPENSTACK_NEUTRON_NETWORK', {})
+        return network_config.get('enable_router', True)
+
     def add_resource_url(self, view, resources):
         tenant_id = self.request.user.tenant_id
         for resource in resources:
@@ -108,63 +157,65 @@ class JSONView(View):
                 return True
         return False
 
-    def get(self, request, *args, **kwargs):
-        data = {}
+    def _get_servers(self, request):
         # Get nova data
         try:
             servers, more = api.nova.server_list(request)
         except Exception:
             servers = []
+        data = []
         console_type = getattr(settings, 'CONSOLE_TYPE', 'AUTO')
-        if console_type == 'SPICE':
-            console = 'spice'
-        else:
-            console = 'vnc'
-        data['servers'] = [{'name': server.name,
-                            'status': server.status,
-                            'console': console,
-                            'task': getattr(server, 'OS-EXT-STS:task_state'),
-                            'id': server.id} for server in servers]
-        self.add_resource_url('horizon:project:instances:detail',
-                              data['servers'])
+        # lowercase of the keys will be used at the end of the console URL.
+        for server in servers:
+            try:
+                console = i_console.get_console(
+                    request, console_type, server)[0].lower()
+            except exceptions.NotAvailable:
+                console = None
 
+            server_data = {'name': server.name,
+                           'status': server.status,
+                           'task': getattr(server, 'OS-EXT-STS:task_state'),
+                           'id': server.id}
+            if console:
+                server_data['console'] = console
+            data.append(server_data)
+        self.add_resource_url('horizon:project:instances:detail', data)
+        return data
+
+    def _get_networks(self, request):
         # Get neutron data
         # if we didn't specify tenant_id, all networks shown as admin user.
         # so it is need to specify the networks. However there is no need to
         # specify tenant_id for subnet. The subnet which belongs to the public
         # network is needed to draw subnet information on public network.
         try:
-            neutron_public_networks = api.neutron.network_list(
-                request,
-                **{'router:external': True})
             neutron_networks = api.neutron.network_list_for_tenant(
                 request,
                 request.user.tenant_id)
-            neutron_ports = api.neutron.port_list(request)
-            neutron_routers = api.neutron.router_list(
-                request,
-                tenant_id=request.user.tenant_id)
         except Exception:
-            neutron_public_networks = []
             neutron_networks = []
-            neutron_ports = []
-            neutron_routers = []
-
         networks = [{'name': network.name,
-                    'id': network.id,
-                    'subnets': [{'cidr': subnet.cidr}
-                                for subnet in network.subnets],
-                    'router:external': network['router:external']}
+                     'id': network.id,
+                     'subnets': [{'cidr': subnet.cidr}
+                                 for subnet in network.subnets],
+                     'router:external': network['router:external']}
                     for network in neutron_networks]
         self.add_resource_url('horizon:project:networks:detail',
                               networks)
+
         # Add public networks to the networks list
-        for publicnet in neutron_public_networks:
-            found = False
-            for network in networks:
-                if publicnet.id == network['id']:
-                    found = True
-            if not found:
+        if self.is_router_enabled:
+            try:
+                neutron_public_networks = api.neutron.network_list(
+                    request,
+                    **{'router:external': True})
+            except Exception:
+                neutron_public_networks = []
+            my_network_ids = [net['id'] for net in networks]
+            for publicnet in neutron_public_networks:
+                if publicnet.id in my_network_ids:
+                    continue
                 try:
                     subnets = [{'cidr': subnet.cidr}
                                for subnet in publicnet.subnets]
@@ -175,31 +226,51 @@ class JSONView(View):
                     'id': publicnet.id,
                     'subnets': subnets,
                     'router:external': publicnet['router:external']})
-        data['networks'] = sorted(networks,
-                                  key=lambda x: x.get('router:external'),
-                                  reverse=True)
 
-        data['ports'] = [{'id': port.id,
-                          'network_id': port.network_id,
-                          'device_id': port.device_id,
-                          'fixed_ips': port.fixed_ips,
-                          'device_owner': port.device_owner,
-                          'status': port.status
-                          }
-                         for port in neutron_ports]
+        return sorted(networks,
+                      key=lambda x: x.get('router:external'),
+                      reverse=True)
+
+    def _get_routers(self, request):
+        if not self.is_router_enabled:
+            return []
+        try:
+            neutron_routers = api.neutron.router_list(
+                request,
+                tenant_id=request.user.tenant_id)
+        except Exception:
+            neutron_routers = []
+
+        routers = [{'id': router.id,
+                    'name': router.name,
+                    'status': router.status,
+                    'external_gateway_info': router.external_gateway_info}
+                   for router in neutron_routers]
+        self.add_resource_url('horizon:project:routers:detail', routers)
+        return routers
+
+    def _get_ports(self, request):
+        try:
+            neutron_ports = api.neutron.port_list(request)
+        except Exception:
+            neutron_ports = []
+
+        ports = [{'id': port.id,
+                  'network_id': port.network_id,
+                  'device_id': port.device_id,
+                  'fixed_ips': port.fixed_ips,
+                  'device_owner': port.device_owner,
+                  'status': port.status}
+                 for port in neutron_ports
+                 if port.device_owner != 'network:router_ha_interface']
         self.add_resource_url('horizon:project:networks:ports:detail',
-                              data['ports'])
+                              ports)
+        return ports
 
-        data['routers'] = [{
-            'id': router.id,
-            'name': router.name,
-            'status': router.status,
-            'external_gateway_info': router.external_gateway_info}
-            for router in neutron_routers]
-
+    def _prepare_gateway_ports(self, routers, ports):
         # user can't see port on external network. so we are
         # adding fake port based on router information
-        for router in data['routers']:
+        for router in routers:
             external_gateway_info = router.get('external_gateway_info')
             if not external_gateway_info:
                 continue
@@ -207,7 +278,7 @@ class JSONView(View):
                 'network_id')
             if not external_network:
                 continue
-            if self._check_router_external_port(data['ports'],
+            if self._check_router_external_port(ports,
                                                 router['id'],
                                                 external_network):
                 continue
@@ -215,9 +286,13 @@ class JSONView(View):
                          'network_id': external_network,
                          'device_id': router['id'],
                          'fixed_ips': []}
-            data['ports'].append(fake_port)
+            ports.append(fake_port)
 
-        self.add_resource_url('horizon:project:routers:detail',
-                              data['routers'])
+    def get(self, request, *args, **kwargs):
+        data = {'servers': self._get_servers(request),
+                'networks': self._get_networks(request),
+                'ports': self._get_ports(request),
+                'routers': self._get_routers(request)}
+        self._prepare_gateway_ports(data['routers'], data['ports'])
         json_string = json.dumps(data, ensure_ascii=False)
         return HttpResponse(json_string, content_type='text/json')

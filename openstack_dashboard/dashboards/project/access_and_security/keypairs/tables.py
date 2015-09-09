@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -16,6 +14,7 @@
 
 from django.utils.translation import string_concat  # noqa
 from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ungettext_lazy
 
 from horizon import tables
 
@@ -24,8 +23,23 @@ from openstack_dashboard.usage import quotas
 
 
 class DeleteKeyPairs(tables.DeleteAction):
-    data_type_singular = _("Key Pair")
-    data_type_plural = _("Key Pairs")
+    policy_rules = (("compute", "compute_extension:keypairs:delete"),)
+
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Key Pair",
+            u"Delete Key Pairs",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Key Pair",
+            u"Deleted Key Pairs",
+            count
+        )
 
     def delete(self, request, obj_id):
         api.nova.keypair_delete(request, obj_id)
@@ -35,14 +49,18 @@ class ImportKeyPair(tables.LinkAction):
     name = "import"
     verbose_name = _("Import Key Pair")
     url = "horizon:project:access_and_security:keypairs:import"
-    classes = ("ajax-modal", "btn-upload")
+    classes = ("ajax-modal",)
+    icon = "upload"
+    policy_rules = (("compute", "compute_extension:keypairs:create"),)
 
 
 class CreateKeyPair(tables.LinkAction):
     name = "create"
     verbose_name = _("Create Key Pair")
     url = "horizon:project:access_and_security:keypairs:create"
-    classes = ("ajax-modal", "btn-create")
+    classes = ("ajax-modal",)
+    icon = "plus"
+    policy_rules = (("compute", "compute_extension:keypairs:create"),)
 
     def allowed(self, request, keypair=None):
         usages = quotas.tenant_quota_usages(request)
@@ -60,15 +78,28 @@ class CreateKeyPair(tables.LinkAction):
         return True
 
 
+class KeypairsFilterAction(tables.FilterAction):
+
+    def filter(self, table, keypairs, filter_string):
+        """Naive case-insensitive search."""
+        query = filter_string.lower()
+        return [keypair for keypair in keypairs
+                if query in keypair.name.lower()]
+
+
 class KeypairsTable(tables.DataTable):
-    name = tables.Column("name", verbose_name=_("Key Pair Name"))
+    detail_link = "horizon:project:access_and_security:keypairs:detail"
+
+    name = tables.Column("name", verbose_name=_("Key Pair Name"),
+                         link=detail_link)
     fingerprint = tables.Column("fingerprint", verbose_name=_("Fingerprint"))
 
     def get_object_id(self, keypair):
         return keypair.name
 
-    class Meta:
+    class Meta(object):
         name = "keypairs"
         verbose_name = _("Key Pairs")
-        table_actions = (CreateKeyPair, ImportKeyPair, DeleteKeyPairs,)
+        table_actions = (CreateKeyPair, ImportKeyPair, DeleteKeyPairs,
+                         KeypairsFilterAction,)
         row_actions = (DeleteKeyPairs,)
