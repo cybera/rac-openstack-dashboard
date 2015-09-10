@@ -24,7 +24,7 @@ def get_user_home(user):
     dashboard = None
     if user.is_superuser:
         try:
-            dashboard = horizon.get_dashboard('admin')
+            dashboard = horizon.get_dashboard('projects')
         except base.NotRegistered:
             pass
 

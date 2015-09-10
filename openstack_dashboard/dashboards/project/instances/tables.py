@@ -472,10 +472,7 @@ class ResizeLink(policy.PolicyTargetMixin, tables.LinkAction):
         return "?".join([base_url, param])
 
     def allowed(self, request, instance):
-        return ((instance.status in ACTIVE_STATES
-                 or instance.status == 'SHUTOFF')
-                and not is_deleting(instance))
-
+        return False
 
 class ConfirmResize(policy.PolicyTargetMixin, tables.Action):
     name = "confirm"

@@ -136,7 +136,7 @@ class ExtendVolume(VolumePolicyTargetMixin, tables.LinkAction):
     policy_rules = (("volume", "volume:extend"),)
 
     def allowed(self, request, volume=None):
-        return volume.status == "available"
+        return False
 
 
 class EditAttachments(tables.LinkAction):

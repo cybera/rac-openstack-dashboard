@@ -53,4 +53,12 @@ def openstack(request):
                              region in available_regions]}
     context['regions'] = regions
 
+    admin_notice = ''
+    context['admin_notice'] = ''
+    with open('/etc/openstack-dashboard/admin-notice.txt') as f:
+        admin_notice = f.readline().strip()
+
+    if admin_notice != '':
+        context['admin_notice'] = admin_notice
+
     return context
