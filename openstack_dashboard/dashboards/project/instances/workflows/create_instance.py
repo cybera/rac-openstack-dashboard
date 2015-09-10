@@ -155,7 +155,7 @@ class SetInstanceDetailsAction(workflows.Action):
             ("image_id", _("Boot from image")),
             ("instance_snapshot_id", _("Boot from snapshot")),
         ]
-        if base.is_service_enabled(request, 'volume'):
+        if False:
             source_type_choices.append(("volume_id", _("Boot from volume")))
 
             try:
