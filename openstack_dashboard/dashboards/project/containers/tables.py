@@ -301,7 +301,7 @@ class ViewObject(tables.LinkAction):
     verbose_name = _("View Details")
     url = "horizon:project:containers:object_detail"
     classes = ("ajax-modal", "btn-view")
-    allowed_data_types = ("objects",)
+    allowed_data_types = ("objects", "subfolders",)
 
     def get_link_url(self, obj):
         container_name = self.table.kwargs['container_name']
