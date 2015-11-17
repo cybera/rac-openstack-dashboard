@@ -5455,18 +5455,15 @@ td.no-transition {
       font-weight: bold;
       display: inline-block; }
 
-      .login.modal .modal-dialog {
-        width: 390px; }
+      .modal.fullscreen .modal-dialog {
+        width: 90%;
+        margin: auto;
+        left: 5%; }
 
-        .modal.fullscreen .modal-dialog {
-          width: 90%;
-          margin: auto;
-          left: 5%; }
-
-          .modal.loading .modal-dialog {
-            width: 170px; }
-            .modal.loading .modal-dialog .modal-body {
-              height: 170px; }
+        .modal.loading .modal-dialog {
+          width: 170px; }
+          .modal.loading .modal-dialog .modal-body {
+            height: 170px; }
 
 .modal.loading p {
   text-align: center;
@@ -9799,11 +9796,10 @@ button.close {
   padding-right: 15px; }
   .topbar h1.brand {
     display: inline-block;
-    width: 222px;
     margin: 0 0 0 10px;
     line-height: 1; }
     .topbar h1.brand a {
-      background: url('/static/dashboard/img/logo.png?369c667318de') left center no-repeat;
+      background: url('/static/dashboard/img/logo.png') left center no-repeat;
       display: block;
       text-indent: -9999px; }
   .topbar .switcher_bar {
