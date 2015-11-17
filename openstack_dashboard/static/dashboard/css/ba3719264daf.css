@@ -9682,12 +9682,12 @@ button.close {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             .fa-medium:before {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               content: "\f23a"; }
 #splash .login {
-  background: url('/static/dashboard/img/logo-splash.png?1be998539fb2') no-repeat center 35px;
+  background: url('/static/dashboard/img/logo-splash.png') no-repeat center 35px;
   position: absolute;
   top: 80px;
   left: 50%;
   margin: 0 0 0 -195px;
-  padding-top: 170px;
+  padding-top: 290px;
   width: 390px;
   border: 1px solid #dddddd;
   max-height: none;
@@ -9796,11 +9796,10 @@ button.close {
   padding-right: 15px; }
   .topbar h1.brand {
     display: inline-block;
-    width: 222px;
     margin: 0 0 0 10px;
     line-height: 1; }
     .topbar h1.brand a {
-      background: url('/static/dashboard/img/logo.png?b7770eaa949e') left center no-repeat;
+      background: url('/static/dashboard/img/logo.png') left center no-repeat;
       display: block;
       text-indent: -9999px; }
   .topbar .switcher_bar {
