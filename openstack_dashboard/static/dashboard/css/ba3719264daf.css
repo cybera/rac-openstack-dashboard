@@ -6730,6 +6730,21 @@ a.thumbnail:hover, a.thumbnail:focus, a.thumbnail.active {
               border-top-color: #e4b9c0; }
               .alert-danger .alert-link, .javascript_disabled_alert .alert-link {
                 color: #843534; }
+
+.alert-admin-notice {
+  background-color: #f2dede;
+  border-color: #eed3d7;
+  color: #b94a48;
+  padding: 5px;
+  text-align: center;
+  margin-bottom: 0px;
+}
+
+.alert-admin-notice a {
+  text-decoration: underline;
+  color: #b94a48;
+}
+
 @-webkit-keyframes progress-bar-stripes {
   from {
     background-position: 40px 0;   }
