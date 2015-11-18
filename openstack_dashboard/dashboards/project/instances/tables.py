@@ -363,6 +363,32 @@ class LaunchLinkNG(LaunchLink):
         kwargs['preempt'] = True
         super(LaunchLink, self).__init__(attrs, **kwargs)
 
+    def allowed(self, request, datum):
+        try:
+            limits = api.nova.tenant_absolute_limits(request, reserved=True)
+
+            instances_available = limits['maxTotalInstances'] \
+                - limits['totalInstancesUsed']
+            cores_available = limits['maxTotalCores'] \
+                - limits['totalCoresUsed']
+            ram_available = limits['maxTotalRAMSize'] - limits['totalRAMUsed']
+
+            if instances_available <= 0 or cores_available <= 0 \
+                    or ram_available <= 0:
+                if "disabled" not in self.classes:
+                    self.classes = [c for c in self.classes] + ['disabled']
+                    self.verbose_name = string_concat(self.verbose_name, ' ',
+                                                      _("(Quota exceeded)"))
+            else:
+                self.verbose_name = _("Launch Instance (Beta)")
+                classes = [c for c in self.classes if c != "disabled"]
+                self.classes = classes
+        except Exception:
+            LOG.exception("Failed to retrieve quota information")
+            # If we can't get the quota information, leave it to the
+            # API to check when launching
+        return True  # The action should always be displayed
+
     def get_link_url(self, datum=None):
         return "javascript:void(0);"
 
@@ -1048,10 +1074,10 @@ class InstancesTable(tables.DataTable):
         row_class = UpdateRow
         table_actions_menu = (StartInstance, StopInstance, SoftRebootInstance)
         launch_actions = ()
+        if getattr(settings, 'LAUNCH_INSTANCE_NG_ENABLED', True):
+            launch_actions = (LaunchLinkNG,) + launch_actions
         if getattr(settings, 'LAUNCH_INSTANCE_LEGACY_ENABLED', True):
             launch_actions = (LaunchLink,) + launch_actions
-        if getattr(settings, 'LAUNCH_INSTANCE_NG_ENABLED', False):
-            launch_actions = (LaunchLinkNG,) + launch_actions
         table_actions = launch_actions + (TerminateInstance,
                                           InstancesFilterAction)
         row_actions = (StartInstance, ConfirmResize, RevertResize,

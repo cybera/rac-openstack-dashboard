@@ -386,15 +386,15 @@
       function getVolumes(){
         var volumePromises = [];
         // Need to check if Volume service is enabled before getting volumes
-        model.volumeBootable = true;
-        addAllowedBootSource(model.volumes, SOURCE_TYPE_VOLUME, gettext('Volume'));
-        addAllowedBootSource(model.volumeSnapshots, SOURCE_TYPE_VOLUME_SNAPSHOT, gettext('Volume Snapshot'));
-        volumePromises.push(cinderAPI.getVolumes({ status: 'available',  bootable: 1 }).then(onGetVolumes));
-        volumePromises.push(cinderAPI.getVolumeSnapshots({ status: 'available' }).then(onGetVolumeSnapshots));
+        model.volumeBootable = false;
+        //addAllowedBootSource(model.volumes, SOURCE_TYPE_VOLUME, gettext('Volume'));
+        //addAllowedBootSource(model.volumeSnapshots, SOURCE_TYPE_VOLUME_SNAPSHOT, gettext('Volume Snapshot'));
+        //volumePromises.push(cinderAPI.getVolumes({ status: 'available',  bootable: 1 }).then(onGetVolumes));
+        //volumePromises.push(cinderAPI.getVolumeSnapshots({ status: 'available' }).then(onGetVolumeSnapshots));
 
         // Can only boot image to volume if the Nova extension is enabled.
-        novaExtensions.ifNameEnabled('BlockDeviceMappingV2Boot')
-          .then(function(){ model.allowCreateVolumeFromImage = true; });
+        //novaExtensions.ifNameEnabled('BlockDeviceMappingV2Boot')
+        //  .then(function(){ model.allowCreateVolumeFromImage = true; });
 
         return $q.all(volumePromises);
       }

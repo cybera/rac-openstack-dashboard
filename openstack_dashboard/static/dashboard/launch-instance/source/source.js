@@ -23,9 +23,7 @@
    */
   module.constant('bootSourceTypes', {
     IMAGE: 'image',
-    INSTANCE_SNAPSHOT: 'snapshot',
-    VOLUME: 'volume',
-    VOLUME_SNAPSHOT: 'volume_snapshot'
+    INSTANCE_SNAPSHOT: 'snapshot'
   });
 
   /**
@@ -112,9 +110,7 @@
 
     $scope.bootSourcesOptions = [
       { type: bootSourceTypes.IMAGE, label: gettext('Image') },
-      { type: bootSourceTypes.INSTANCE_SNAPSHOT, label: gettext('Instance Snapshot') },
-      { type: bootSourceTypes.VOLUME, label: gettext('Volume') },
-      { type: bootSourceTypes.VOLUME_SNAPSHOT, label: gettext('Volume Snapshot') }
+      { type: bootSourceTypes.INSTANCE_SNAPSHOT, label: gettext('Instance Snapshot') }
     ];
 
     $scope.updateBootSourceSelection = function (selectedSource) {
@@ -151,18 +147,6 @@
         allocated: selection,
         displayedAvailable: [],
         displayedAllocated: selection
-      },
-      volume: {
-        available: $scope.model.volumes,
-        allocated: selection,
-        displayedAvailable: [],
-        displayedAllocated: selection
-      },
-      volume_snapshot: {
-        available: $scope.model.volumeSnapshots,
-        allocated: selection,
-        displayedAvailable: [],
-        displayedAllocated: selection
       }
     };
 
@@ -181,20 +165,6 @@
         { text: gettext('Size'), style: { width: '15%' }, classList: ['number'], sortable: true },
         { text: gettext('Type'), sortable: true },
         { text: gettext('Visibility'), sortable: true }
-      ],
-      volume: [
-        { text: gettext('Name'), style: { width: '25%' }, sortable: true, sortDefault: true },
-        { text: gettext('Description'), style: { width: '20%' }, sortable: true },
-        { text: gettext('Size'), style: { width: '15%' }, classList: ['number'], sortable: true },
-        { text: gettext('Type'), style: { width: '20%' }, sortable: true },
-        { text: gettext('Availability Zone'), style: { width: '20%' }, sortable: true }
-      ],
-      volume_snapshot: [
-        { text: gettext('Name'), style: { width: '25%' }, sortable: true, sortDefault: true },
-        { text: gettext('Description'), style: { width: '20%' }, sortable: true },
-        { text: gettext('Size'), style: { width: '15%' }, classList: ['number'], sortable: true },
-        { text: gettext('Created'), style: { width: '15%' }, sortable: true },
-        { text: gettext('Status'), style: { width: '20%' }, sortable: true }
       ]
     };
 
@@ -218,21 +188,6 @@
         { key: 'disk_format', style: { 'text-transform': 'uppercase' } },
         { key: 'is_public', filter: decodeFilter, filterArg: _visibilitymap,
           style: { 'text-transform': 'capitalize' } }
-      ],
-      volume: [
-        { key: 'name', classList: ['hi-light'] },
-        { key: 'description' },
-        { key: 'size', filter: gbFilter, classList: ['number'] },
-        { key: 'volume_image_metadata', filter: diskFormatFilter,
-          style: { 'text-transform': 'uppercase' } },
-        { key: 'availability_zone' }
-      ],
-      volume_snapshot: [
-        { key: 'name', classList: ['hi-light'] },
-        { key: 'description' },
-        { key: 'size', filter: gbFilter, classList: ['number'] },
-        { key: 'created_at', filter: dateFilter, filterArg: 'short' },
-        { key: 'status', style: { 'text-transform': 'capitalize' } }
       ]
     };
 
