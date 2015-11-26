@@ -101,6 +101,9 @@ class UpdateProjectQuotaAction(ProjectQuotaAction):
                 bad_values.append(_('%(used)s %(key)s used') %
                                   {'used': used,
                                    'key': quotas.QUOTA_NAMES.get(key, key)})
+        # JT
+        bad_values = []
+
         if bad_values:
             value_str = ", ".join(bad_values)
             msg = (_('Quota value(s) cannot be less than the current usage '
