@@ -26,6 +26,8 @@ from horizon import views
 
 from openstack_dashboard import usage
 
+# JT
+from openstack_dashboard.api import swift
 
 class ProjectUsageCsvRenderer(csvbase.BaseCsvResponse):
 
@@ -53,6 +55,11 @@ class ProjectOverview(usage.UsageView):
 
     def get_data(self):
         super(ProjectOverview, self).get_data()
+
+        # JT
+        self.usage.limits['object_storage'] = swift.swift_get_quota(self.request)
+        print swift.swift_get_quota(self.request)
+
         return self.usage.get_instances()
 
 

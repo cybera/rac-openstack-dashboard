@@ -354,3 +354,12 @@ def swift_get_object(request, container_name, object_name, with_data=True,
                          container_name,
                          orig_name=orig_name,
                          data=data)
+
+# JT
+def swift_get_quota(request, marker=None):
+    head = swift_api(request).head_account()
+    quota_info = {
+            'used': int(head['x-account-bytes-used']) / 1024 / 1024,
+            'quota': int(head['x-account-meta-quota-bytes']) / 1024 / 1024
+    }
+    return quota_info
