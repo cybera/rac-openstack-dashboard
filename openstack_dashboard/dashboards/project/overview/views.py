@@ -27,7 +27,7 @@ from horizon import views
 from openstack_dashboard import usage
 
 # JT
-from openstack_dashboard.api import swift
+from openstack_dashboard.api import jt
 
 class ProjectUsageCsvRenderer(csvbase.BaseCsvResponse):
 
@@ -57,8 +57,10 @@ class ProjectOverview(usage.UsageView):
         super(ProjectOverview, self).get_data()
 
         # JT
-        self.usage.limits['object_storage'] = swift.swift_get_quota(self.request)
-        print swift.swift_get_quota(self.request)
+        quota = jt.get_swift_quota(self.request)
+        used = jt.get_swift_usage(self.request)
+        self.usage.limits['object_storage_quota'] = quota
+        self.usage.limits['object_storage_used'] = used
 
         return self.usage.get_instances()
 
