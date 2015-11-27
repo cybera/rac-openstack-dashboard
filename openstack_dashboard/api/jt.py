@@ -14,10 +14,15 @@ def get_swift_usage(request):
     query_results = {}
     quota_query = "aliasByNode(smartSummarize(sumSeries(swift.*.project.%s.account_size), '1h', 'sum'), 4)" % project_id
 
-    r = requests.get("%s%s" % (base_url, quota_query))
-    result = json.loads(r.content)
-    if len(result) >= 1 and 'datapoints' in result[0]:
-        usage = int(result[0]['datapoints'][-2][0])
-        if usage > 0:
-            return usage / 1024 / 1024
-    return 0
+    try:
+        r = requests.get("%s%s" % (base_url, quota_query))
+        result = json.loads(r.content)
+        usage_mb = 0
+        if len(result) >= 1 and 'datapoints' in result[0]:
+            usage = int(result[0]['datapoints'][-2][0])
+            if usage > 0:
+                usage_mb = usage / 1024 / 1024
+    except:
+        pass
+    finally:
+        return usage_mb
