@@ -1,14 +1,21 @@
+from openstack_dashboard.api import base
 from openstack_dashboard.api import swift
 import requests
 import json
 
 def get_swift_quota(request):
+    if not base.is_service_enabled(request, "object-store"):
+        return 0
+
     head = swift.swift_api(request).head_account()
     if 'x-account-meta-quota-bytes' in head:
         return int(head['x-account-meta-quota-bytes']) / 1024 / 1024
     return 1048576
 
 def get_swift_usage(request):
+    if not base.is_service_enabled(request, "object-store"):
+        return 0
+
     project_id = request.user.tenant_id
     base_url = 'http://yyc-graphite.cloud.cybera.ca/render?from=-7d&width=800&format=json&target='
     query_results = {}
