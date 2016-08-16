@@ -22,6 +22,23 @@ from openstack_dashboard.api.rest import utils as rest_utils
 
 from openstack_dashboard.api.rest import urls
 
+import requests
+from openstack_dashboard.api import base
+
+
+@urls.register
+class UserByName(generic.View):
+    url_regex = r'keystone/userbyname/$'
+
+    @rest_utils.ajax()
+    def get(self, request):
+        url = api.keystone._get_endpoint_url(request, 'adminURL') + '/v2.0/users'
+        headers = {'X-Auth-Token': request.user.token.id}
+        payload = {'name': request.GET.get('name')}
+
+        r = requests.get(url, headers=headers, params=payload)
+
+        return r.to_dict()
 
 @urls.register
 class Users(generic.View):
