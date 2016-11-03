@@ -26,7 +26,7 @@ def get_swift_usage(request):
         r = requests.get("%s%s" % (base_url, quota_query))
         result = json.loads(r.content)
         if len(result) >= 1 and 'datapoints' in result[0]:
-            usage = int(result[0]['datapoints'][-2][0])
+            usage = int(result[0]['datapoints'][-3][0])
             if usage > 0:
                 usage_mb = usage / 1024 / 1024
     except:
