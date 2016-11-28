@@ -19,13 +19,12 @@
 from django.conf.urls import patterns
 from django.conf.urls import url
 
-from openstack_dashboard.dashboards.identity.projects import views
+from openstack_dashboard.dashboards.identity.project_admin import views
 
 
 urlpatterns = patterns(
     '',
     url(r'^$', views.IndexView.as_view(), name='index'),
-    url(r'^create$', views.CreateProjectView.as_view(), name='create'),
     url(r'^(?P<tenant_id>[^/]+)/update/$',
         views.UpdateProjectView.as_view(), name='update'),
     url(r'^(?P<project_id>[^/]+)/usage/$',

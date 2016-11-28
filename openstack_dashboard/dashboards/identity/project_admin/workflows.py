@@ -36,12 +36,12 @@ from openstack_dashboard.api import keystone
 from openstack_dashboard.api import nova
 from openstack_dashboard.usage import quotas
 
-INDEX_URL = "horizon:identity:projects:index"
+INDEX_URL = "horizon:identity:project_admin:index"
 ADD_USER_URL = "horizon:identity:projects:create_user"
 PROJECT_GROUP_ENABLED = keystone.VERSIONS.active >= 3
 PROJECT_USER_MEMBER_SLUG = "update_members"
 PROJECT_GROUP_MEMBER_SLUG = "update_group_members"
-COMMON_HORIZONTAL_TEMPLATE = "identity/projects/_common_horizontal_form.html"
+COMMON_HORIZONTAL_TEMPLATE = "identity/project_admin/_common_horizontal_form.html"
 
 
 class CreateProjectInfoAction(workflows.Action):
@@ -164,7 +164,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         slug = PROJECT_USER_MEMBER_SLUG
 
 
-class UpdateProjectMembers(workflows.UpdateStudentsStep):
+class UpdateProjectMembers(workflows.UpdateMembersStep):
     action_class = UpdateProjectMembersAction
     available_list_title = _("All Users")
     members_list_title = _("Project Members")

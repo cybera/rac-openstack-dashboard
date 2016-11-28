@@ -32,9 +32,9 @@ from openstack_dashboard import policy
 from openstack_dashboard import usage
 from openstack_dashboard.usage import quotas
 
-from openstack_dashboard.dashboards.identity.projects \
+from openstack_dashboard.dashboards.identity.project_admin \
     import tables as project_tables
-from openstack_dashboard.dashboards.identity.projects \
+from openstack_dashboard.dashboards.identity.project_admin \
     import workflows as project_workflows
 from openstack_dashboard.dashboards.project.overview \
     import views as project_views
@@ -120,47 +120,6 @@ class ProjectUsageView(usage.UsageView):
     def get_data(self):
         super(ProjectUsageView, self).get_data()
         return self.usage.get_instances()
-
-
-class CreateProjectView(workflows.WorkflowView):
-    workflow_class = project_workflows.CreateProject
-
-    def get_initial(self):
-        initial = super(CreateProjectView, self).get_initial()
-
-        # Set the domain of the project
-        domain = api.keystone.get_default_domain(self.request)
-        initial["domain_id"] = domain.id
-        initial["domain_name"] = domain.name
-
-        # get initial quota defaults
-        try:
-            quota_defaults = quotas.get_default_quota_data(self.request)
-
-            try:
-                if api.base.is_service_enabled(self.request, 'network') and \
-                        api.neutron.is_quotas_extension_supported(
-                            self.request):
-                    # TODO(jpichon): There is no API to access the Neutron
-                    # default quotas (LP#1204956). For now, use the values
-                    # from the current project.
-                    project_id = self.request.user.project_id
-                    quota_defaults += api.neutron.tenant_quota_get(
-                        self.request,
-                        tenant_id=project_id)
-            except Exception:
-                error_msg = _('Unable to retrieve default Neutron quota '
-                              'values.')
-                self.add_error_to_step(error_msg, 'create_quotas')
-
-            for field in quotas.QUOTA_FIELDS:
-                initial[field] = quota_defaults.get(field).limit
-
-        except Exception:
-            error_msg = _('Unable to retrieve default quota values.')
-            self.add_error_to_step(error_msg, 'create_quotas')
-
-        return initial
 
 
 class UpdateProjectView(workflows.WorkflowView):

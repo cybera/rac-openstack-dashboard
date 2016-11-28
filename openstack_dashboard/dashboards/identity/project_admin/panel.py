@@ -17,10 +17,10 @@ import horizon
 from openstack_dashboard.dashboards.identity import dashboard
 
 
-class Classrooms(horizon.Panel):
-    name = _("Classrooms")
-    slug = 'classrooms'
-    policy_rules = (("identity", "identity:list_user_projects"))
+class ProjectAdmin(horizon.Panel):
+    name = _("Project Administration")
+    slug = 'project_admin'
+    #policy_rules = (("identity", "identity:list_user_projects"))
 
 
-dashboard.Identity.register(Classrooms)
+dashboard.Identity.register(ProjectAdmin)

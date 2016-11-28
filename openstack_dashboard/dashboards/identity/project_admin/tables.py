@@ -44,18 +44,6 @@ class UpdateMembersLink(tables.LinkAction):
         return "?".join([base_url, param])
 
 
-class CreateProject(tables.LinkAction):
-    name = "create"
-    verbose_name = _("Create Project")
-    url = "horizon:identity:projects:create"
-    classes = ("ajax-modal",)
-    icon = "plus"
-    policy_rules = (('identity', 'identity:create_project'),)
-
-    def allowed(self, request, project):
-        return api.keystone.keystone_can_edit_project()
-
-
 class UpdateProject(tables.LinkAction):
     name = "update"
     verbose_name = _("Edit Project")
@@ -66,38 +54,6 @@ class UpdateProject(tables.LinkAction):
 
     def allowed(self, request, project):
         return api.keystone.keystone_can_edit_project()
-
-
-class DeleteTenantsAction(tables.DeleteAction):
-    @staticmethod
-    def action_present(count):
-        return ungettext_lazy(
-            u"Delete Project",
-            u"Delete Projects",
-            count
-        )
-
-    @staticmethod
-    def action_past(count):
-        return ungettext_lazy(
-            u"Deleted Project",
-            u"Deleted Projects",
-            count
-        )
-
-    policy_rules = (("identity", "identity:delete_project"),)
-
-    def allowed(self, request, project):
-        return api.keystone.keystone_can_edit_project()
-
-    def delete(self, request, obj_id):
-        api.keystone.tenant_delete(request, obj_id)
-
-    def handle(self, table, request, obj_ids):
-        response = \
-            super(DeleteTenantsAction, self).handle(table, request, obj_ids)
-        auth_utils.remove_project_cache(request.user.token.id)
-        return response
 
 
 class TenantFilterAction(tables.FilterAction):
@@ -157,7 +113,7 @@ class UpdateCell(tables.UpdateAction):
         return True
 
 
-class ClassroomsTable(tables.DataTable):
+class TenantsTable(tables.DataTable):
     name = tables.Column('name', verbose_name=_('Name'),
                          link=("horizon:identity:projects:detail"),
                          form_field=forms.CharField(max_length=64),
@@ -169,18 +125,11 @@ class ClassroomsTable(tables.DataTable):
                                     required=False),
                                 update_action=UpdateCell)
     id = tables.Column('id', verbose_name=_('Project ID'))
-    enabled = tables.Column('enabled', verbose_name=_('Enabled'), status=True,
-                            filters=(filters.yesno, filters.capfirst),
-                            form_field=forms.BooleanField(
-                                label=_('Enabled'),
-                                required=False),
-                            update_action=UpdateCell)
 
     class Meta(object):
-        name = "classrooms"
-        verbose_name = _("Classrooms")
+        name = "tenants"
+        verbose_name = _("Projects")
         row_class = UpdateRow
-        row_actions = (UpdateMembersLink, UpdateProject, DeleteTenantsAction)
-        table_actions = (TenantFilterAction, CreateProject,
-                         DeleteTenantsAction)
+        row_actions = (UpdateMembersLink,)
+        table_actions = (TenantFilterAction,)
         pagination_param = "tenant_marker"
