@@ -32,13 +32,13 @@ class UserByName(generic.View):
 
     @rest_utils.ajax()
     def get(self, request):
-        url = api.keystone._get_endpoint_url(request, 'adminURL') + '/v2.0/users'
+        url = api.keystone._get_endpoint_url(request, 'adminURL') + '/users'
         headers = {'X-Auth-Token': request.user.token.id}
         payload = {'name': request.GET.get('name')}
 
         r = requests.get(url, headers=headers, params=payload)
 
-        return r.to_dict()
+        return r.json()
 
 @urls.register
 class Users(generic.View):
