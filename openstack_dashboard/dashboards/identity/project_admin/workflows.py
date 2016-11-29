@@ -28,6 +28,7 @@ from horizon import forms
 from horizon import messages
 from horizon.utils import memoized
 from horizon import workflows
+from horizon.workflows.cybera import UpdateMembersStep
 
 from openstack_dashboard import api
 from openstack_dashboard.api import base
@@ -164,7 +165,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         slug = PROJECT_USER_MEMBER_SLUG
 
 
-class UpdateProjectMembers(workflows.UpdateMembersStep):
+class UpdateProjectMembers(UpdateMembersStep):
     action_class = UpdateProjectMembersAction
     available_list_title = _("All Users")
     members_list_title = _("Project Members")
