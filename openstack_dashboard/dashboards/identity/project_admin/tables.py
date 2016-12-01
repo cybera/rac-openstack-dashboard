@@ -31,7 +31,7 @@ from openstack_dashboard import policy
 class UpdateMembersLink(tables.LinkAction):
     name = "users"
     verbose_name = _("Manage Members")
-    url = "horizon:identity:projects:update"
+    url = "horizon:identity:project_admin:update"
     classes = ("ajax-modal",)
     icon = "pencil"
     policy_rules = (("identity", "identity:list_users"),
@@ -47,7 +47,7 @@ class UpdateMembersLink(tables.LinkAction):
 class UpdateProject(tables.LinkAction):
     name = "update"
     verbose_name = _("Edit Project")
-    url = "horizon:identity:projects:update"
+    url = "horizon:identity:project_admin:update"
     classes = ("ajax-modal",)
     icon = "pencil"
     policy_rules = (('identity', 'identity:update_project'),)
@@ -115,7 +115,7 @@ class UpdateCell(tables.UpdateAction):
 
 class TenantsTable(tables.DataTable):
     name = tables.Column('name', verbose_name=_('Name'),
-                         link=("horizon:identity:projects:detail"),
+                         link=("horizon:identity:project_admin:detail"),
                          form_field=forms.CharField(max_length=64),
                          update_action=UpdateCell)
     description = tables.Column(lambda obj: getattr(obj, 'description', None),
