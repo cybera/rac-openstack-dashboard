@@ -164,7 +164,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         slug = PROJECT_USER_MEMBER_SLUG
 
 
-class UpdateProjectMembers(workflow.UpdateMembersStep):
+class UpdateProjectMembers(workflows.UpdateMembersStep):
     action_class = UpdateProjectMembersAction
     template_name = "horizon/common/_workflow_step_update_members_cybera.html"
     available_list_title = _("All Users")
