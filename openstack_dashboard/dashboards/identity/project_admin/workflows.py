@@ -37,7 +37,7 @@ from openstack_dashboard.api import nova
 from openstack_dashboard.usage import quotas
 
 INDEX_URL = "horizon:identity:project_admin:index"
-ADD_USER_URL = "horizon:identity:projects:create_user"
+ADD_USER_URL = "horizon:identity:project_admin:create_user"
 PROJECT_GROUP_ENABLED = keystone.VERSIONS.active >= 3
 PROJECT_USER_MEMBER_SLUG = "update_members"
 PROJECT_GROUP_MEMBER_SLUG = "update_group_members"
@@ -193,7 +193,7 @@ class CreateProject(workflows.Workflow):
     finalize_button_name = _("Create Project")
     success_message = _('Created new project "%s".')
     failure_message = _('Unable to create project "%s".')
-    success_url = "horizon:identity:projects:index"
+    success_url = "horizon:identity:project_admin:index"
     default_steps = (CreateProjectInfo,
                      UpdateProjectMembers)
 
@@ -317,7 +317,7 @@ class UpdateProject(workflows.Workflow):
     finalize_button_name = _("Save")
     success_message = _('Modified project "%s".')
     failure_message = _('Unable to modify project "%s".')
-    success_url = "horizon:identity:projects:index"
+    success_url = "horizon:identity:project_admin:index"
     default_steps = (UpdateProjectInfo,
                      UpdateProjectMembers)
 
