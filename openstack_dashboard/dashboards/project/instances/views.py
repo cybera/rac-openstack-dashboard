@@ -377,6 +377,7 @@ class DetailView(tabs.TabView):
             if self.request.GET.get('lease_time', False):
                 lease_time = int(self.request.GET.get('lease_time'))
                 new_lease = datetime.datetime.utcnow() + datetime.timedelta(days=lease_time)
+                print("FOO1: %s", new_lease)
                 jt.set_instance_lease(instance.id, project_id, region, new_lease)
 
             lease_date = jt.get_instance_lease(instance.id, project_id, region)
