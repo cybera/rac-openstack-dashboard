@@ -167,6 +167,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
 class UpdateProjectMembers(workflows.UpdateMembersStep):
     action_class = UpdateProjectMembersAction
     template_name = "horizon/common/_workflow_step_update_members_cybera.html"
+    show_roles = False
     available_list_title = _("All Users")
     members_list_title = _("Project Members")
     no_available_text = _("No users found.")
