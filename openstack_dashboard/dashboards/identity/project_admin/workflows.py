@@ -236,12 +236,12 @@ class CreateProject(workflows.Workflow):
             # count how many users are to be added
             for role in available_roles:
                 field_name = member_step.get_member_field_name(role.id)
-                role_list = data[field_name]
+                role_list = set(data[field_name])
                 users_to_add += len(role_list)
             # add new users to project
             for role in available_roles:
                 field_name = member_step.get_member_field_name(role.id)
-                role_list = data[field_name]
+                role_list = set(data[field_name])
                 users_added = 0
                 for user in role_list:
                     api.keystone.add_tenant_user_role(request,
@@ -449,11 +449,11 @@ class UpdateProject(workflows.Workflow):
             for role in available_roles:
                 field_name = member_step.get_member_field_name(role.id)
                 # Count how many users may be added for exception handling.
-                users_to_modify += len(data[field_name])
+                users_to_modify += len(set(data[field_name]))
             for role in available_roles:
                 users_added = 0
                 field_name = member_step.get_member_field_name(role.id)
-                for user_id in data[field_name]:
+                for user_id in set(data[field_name]):
                     if user_id not in users_roles:
                         api.keystone.add_tenant_user_role(request,
                                                           project=project_id,
