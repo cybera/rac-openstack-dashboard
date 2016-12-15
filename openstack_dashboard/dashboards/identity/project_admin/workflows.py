@@ -121,8 +121,13 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         # Get list of available users
         all_users = []
         try:
-            all_users = api.keystone.user_list(request,
-                                               domain=domain_id)
+            if request.method == "POST":
+                all_users = api.keystone.user_list(request,
+                                                   domain=domain_id)
+            else:
+                all_users = api.keystone.user_list(request,
+                                                   domain=domain_id,
+                                                   project=project.id)
         except Exception:
             exceptions.handle(request, err_msg)
         users_list = [(user.id, user.name) for user in all_users]
