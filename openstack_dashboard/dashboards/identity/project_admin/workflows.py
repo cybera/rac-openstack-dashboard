@@ -127,7 +127,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
             else:
                 all_users = api.keystone.user_list(request,
                                                    domain=domain_id,
-                                                   project=project.id)
+                                                   project=project_id)
         except Exception:
             exceptions.handle(request, err_msg)
         users_list = [(user.id, user.name) for user in all_users]
