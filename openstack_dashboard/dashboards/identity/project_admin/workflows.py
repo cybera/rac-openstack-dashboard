@@ -391,7 +391,7 @@ class UpdateProject(workflows.Workflow):
             project_id = data['project_id']
             return api.keystone.tenant_get(
                 request,
-                project_id)['name']
+                project_id)
         except Exception:
             exceptions.handle(request, ignore=True)
             return
@@ -405,7 +405,7 @@ class UpdateProject(workflows.Workflow):
 
         # Set project name in context for status messages
         project = self._get_project(request, data)
-        self.context['name'] = project.get('name')
+        self.context['name'] = getattr(project, 'name')
 
         ret = self._update_project_members(request, data, project_id)
         if not ret:
