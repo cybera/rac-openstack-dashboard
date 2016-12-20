@@ -77,17 +77,6 @@ class CreateProjectInfoAction(workflows.Action):
         help_text = _("Create a project to organize users.")
 
 
-class CreateProjectInfo(workflows.Step):
-    action_class = CreateProjectInfoAction
-    template_name = COMMON_HORIZONTAL_TEMPLATE
-    contributes = ("domain_id",
-                   "domain_name",
-                   "project_id",
-                   "name",
-                   "description",
-                   "enabled")
-
-
 class UpdateProjectMembersAction(workflows.MembershipAction):
     def __init__(self, request, *args, **kwargs):
         super(UpdateProjectMembersAction, self).__init__(request,
@@ -192,88 +181,6 @@ class UpdateProjectMembers(workflows.UpdateMembersStep):
                 field = self.get_member_field_name(role.id)
                 context[field] = post.getlist(field)
         return context
-
-
-class CreateProject(workflows.Workflow):
-    slug = "create_project"
-    name = _("Create Project")
-    finalize_button_name = _("Create Project")
-    success_message = _('Created new project "%s".')
-    failure_message = _('Unable to create project "%s".')
-    success_url = "horizon:identity:project_admin:index"
-    default_steps = (UpdateProjectMembers,)
-
-    def __init__(self, request=None, context_seed=None, entry_point=None,
-                 *args, **kwargs):
-        if PROJECT_GROUP_ENABLED:
-            self.default_steps = (UpdateProjectMembers,)
-        super(CreateProject, self).__init__(request=request,
-                                            context_seed=context_seed,
-                                            entry_point=entry_point,
-                                            *args,
-                                            **kwargs)
-
-    def format_status_message(self, message):
-        return message % self.context.get('name', 'unknown project')
-
-    def _create_project(self, request, data):
-        # create the project
-        domain_id = data['domain_id']
-        try:
-            desc = data['description']
-            self.object = api.keystone.tenant_create(request,
-                                                     name=data['name'],
-                                                     description=desc,
-                                                     enabled=data['enabled'],
-                                                     domain=domain_id)
-            return self.object
-        except Exception:
-            exceptions.handle(request, ignore=True)
-            return
-
-    def _update_project_members(self, request, data, project_id):
-        # update project members
-        users_to_add = 0
-        try:
-            available_roles = api.keystone.role_list(request)
-            member_step = self.get_step(PROJECT_USER_MEMBER_SLUG)
-            # count how many users are to be added
-            for role in available_roles:
-                field_name = member_step.get_member_field_name(role.id)
-                role_list = set(data[field_name])
-                users_to_add += len(role_list)
-            # add new users to project
-            for role in available_roles:
-                field_name = member_step.get_member_field_name(role.id)
-                role_list = set(data[field_name])
-                users_added = 0
-                for user in role_list:
-                    api.keystone.add_tenant_user_role(request,
-                                                      project=project_id,
-                                                      user=user,
-                                                      role=role.id)
-                    users_added += 1
-                users_to_add -= users_added
-        except Exception:
-            if PROJECT_GROUP_ENABLED:
-                group_msg = _(", add project groups")
-            else:
-                group_msg = ""
-            exceptions.handle(request,
-                              _('Failed to add %(users_to_add)s project '
-                                'members%(group_msg)s and set project quotas.')
-                              % {'users_to_add': users_to_add,
-                                 'group_msg': group_msg})
-        finally:
-            auth_utils.remove_project_cache(request.user.token.id)
-
-    def handle(self, request, data):
-        project = self._create_project(request, data)
-        if not project:
-            return False
-        project_id = project.id
-        self._update_project_members(request, data, project_id)
-        return True
 
 
 class UpdateProjectInfoAction(CreateProjectInfoAction):
