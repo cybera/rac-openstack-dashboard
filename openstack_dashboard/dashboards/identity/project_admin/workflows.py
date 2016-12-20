@@ -386,12 +386,26 @@ class UpdateProject(workflows.Workflow):
         finally:
             auth_utils.remove_project_cache(request.user.token.id)
 
+    def _get_project_name(self, request, data):
+        try:
+            project_id = data['project_id']
+            return api.keystone.tenant_get(
+                request,
+                project_id)
+        except Exception:
+            exceptions.handle(request, ignore=True)
+            return
+
     def handle(self, request, data):
         # FIXME(gabriel): This should be refactored to use Python's built-in
         # sets and do this all in a single "roles to add" and "roles to remove"
         # pass instead of the multi-pass thing happening now.
 
         project_id = data['project_id']
+
+        # Set project name in context for status messages
+        project_name = self._get_project_name(request, data)
+        self.context['name'] = project_name
 
         ret = self._update_project_members(request, data, project_id)
         if not ret:
