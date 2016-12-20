@@ -172,6 +172,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
 class UpdateProjectMembers(workflows.UpdateMembersStep):
     action_class = UpdateProjectMembersAction
     template_name = "horizon/common/_workflow_step_update_members_cybera.html"
+    depends_on = ("project_id",)
     show_roles = False
     available_list_title = _("All Users")
     members_list_title = _("Project Members")
@@ -200,14 +201,12 @@ class CreateProject(workflows.Workflow):
     success_message = _('Created new project "%s".')
     failure_message = _('Unable to create project "%s".')
     success_url = "horizon:identity:project_admin:index"
-    default_steps = (CreateProjectInfo,
-                     UpdateProjectMembers)
+    default_steps = (UpdateProjectMembers,)
 
     def __init__(self, request=None, context_seed=None, entry_point=None,
                  *args, **kwargs):
         if PROJECT_GROUP_ENABLED:
-            self.default_steps = (CreateProjectInfo,
-                                  UpdateProjectMembers)
+            self.default_steps = (UpdateProjectMembers,)
         super(CreateProject, self).__init__(request=request,
                                             context_seed=context_seed,
                                             entry_point=entry_point,
@@ -324,14 +323,12 @@ class UpdateProject(workflows.Workflow):
     success_message = _('Modified project "%s".')
     failure_message = _('Unable to modify project "%s".')
     success_url = "horizon:identity:project_admin:index"
-    default_steps = (UpdateProjectInfo,
-                     UpdateProjectMembers)
+    default_steps = (UpdateProjectMembers,)
 
     def __init__(self, request=None, context_seed=None, entry_point=None,
                  *args, **kwargs):
         if PROJECT_GROUP_ENABLED:
-            self.default_steps = (UpdateProjectInfo,
-                                  UpdateProjectMembers)
+            self.default_steps = (UpdateProjectMembers,)
 
         super(UpdateProject, self).__init__(request=request,
                                             context_seed=context_seed,
@@ -487,13 +484,7 @@ class UpdateProject(workflows.Workflow):
         # sets and do this all in a single "roles to add" and "roles to remove"
         # pass instead of the multi-pass thing happening now.
 
-        project = self._update_project(request, data)
-        if not project:
-            return False
-
         project_id = data['project_id']
-        # Use the domain_id from the project if available
-        domain_id = getattr(project, "domain_id", '')
 
         ret = self._update_project_members(request, data, project_id)
         if not ret:
