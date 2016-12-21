@@ -38,6 +38,9 @@ class UserByName(generic.View):
 
         r = requests.get(url, headers=headers, params=payload)
 
+        if r.status_code != requests.codes.ok:
+            return django.http.HttpResponse(status=r.status_code)
+
         return r.json()
 
 @urls.register
