@@ -131,37 +131,6 @@ class UpdateProjectView(workflows.WorkflowView):
         project_id = self.kwargs['tenant_id']
         initial['project_id'] = project_id
 
-        try:
-            # get initial project info
-            project_info = api.keystone.tenant_get(self.request, project_id,
-                                                   admin=True)
-            for field in PROJECT_INFO_FIELDS:
-                initial[field] = getattr(project_info, field, None)
-
-            # Retrieve the domain name where the project belong
-            if keystone.VERSIONS.active >= 3:
-                try:
-                    domain = api.keystone.domain_get(self.request,
-                                                     initial["domain_id"])
-                    initial["domain_name"] = domain.name
-                except Exception:
-                    exceptions.handle(self.request,
-                                      _('Unable to retrieve project domain.'),
-                                      redirect=reverse(INDEX_URL))
-
-            # get initial project quota
-            quota_data = quotas.get_tenant_quota_data(self.request,
-                                                      tenant_id=project_id)
-            if api.base.is_service_enabled(self.request, 'network') and \
-                    api.neutron.is_quotas_extension_supported(self.request):
-                quota_data += api.neutron.tenant_quota_get(
-                    self.request, tenant_id=project_id)
-            for field in quotas.QUOTA_FIELDS:
-                initial[field] = quota_data.get(field).limit
-        except Exception:
-            exceptions.handle(self.request,
-                              _('Unable to retrieve project details.'),
-                              redirect=reverse(INDEX_URL))
         return initial
 
 
