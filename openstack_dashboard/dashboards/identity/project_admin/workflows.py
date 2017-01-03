@@ -32,9 +32,11 @@ from horizon import workflows
 from openstack_dashboard import api
 from openstack_dashboard.api import base
 from openstack_dashboard.api import cinder
-from openstack_dashboard.api import keystone
 from openstack_dashboard.api import nova
 from openstack_dashboard.usage import quotas
+
+from openstack_dashboard.dashboards.identity.project_admin \
+    import keystone
 
 INDEX_URL = "horizon:identity:project_admin:index"
 ADD_USER_URL = "horizon:identity:project_admin:create_user"
