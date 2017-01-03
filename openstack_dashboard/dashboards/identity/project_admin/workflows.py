@@ -93,7 +93,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
 
         # Get the default role
         try:
-            default_role = api.keystone.get_default_role(self.request)
+            default_role = keystone.get_default_role(self.request)
             # Default role is necessary to add members to a project
             if default_role is None:
                 default = getattr(settings,
@@ -113,10 +113,10 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         all_users = []
         try:
             if request.method == "POST":
-                all_users = api.keystone.user_list(request,
+                all_users = keystone.user_list(request,
                                                    domain=domain_id)
             else:
-                all_users = api.keystone.user_list(request,
+                all_users = keystone.user_list(request,
                                                    domain=domain_id,
                                                    project=project_id)
         except Exception:
@@ -126,7 +126,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         # Get list of roles
         role_list = []
         try:
-            role_list = api.keystone.role_list(request)
+            role_list = keystone.role_list(request)
         except Exception:
             exceptions.handle(request,
                               err_msg,
@@ -142,7 +142,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         # Figure out users & roles
         if project_id:
             try:
-                users_roles = api.keystone.get_project_users_roles(request,
+                users_roles = keystone.get_project_users_roles(request,
                                                                    project_id)
             except Exception:
                 exceptions.handle(request,
@@ -173,7 +173,7 @@ class UpdateProjectMembers(workflows.UpdateMembersStep):
     def contribute(self, data, context):
         if data:
             try:
-                roles = api.keystone.role_list(self.workflow.request)
+                roles = keystone.role_list(self.workflow.request)
             except Exception:
                 exceptions.handle(self.workflow.request,
                                   _('Unable to retrieve user list.'))
@@ -250,13 +250,13 @@ class UpdateProject(workflows.Workflow):
 
     @memoized.memoized_method
     def _get_available_roles(self, request):
-        return api.keystone.role_list(request)
+        return keystone.role_list(request)
 
     def _update_project(self, request, data):
         # update project info
         try:
             project_id = data['project_id']
-            return api.keystone.tenant_update(
+            return keystone.tenant_update(
                 request,
                 project_id,
                 name=data['name'],
@@ -278,7 +278,7 @@ class UpdateProject(workflows.Workflow):
                 # Add it if necessary
                 if role.id not in current_role_ids:
                     # user role has changed
-                    api.keystone.add_tenant_user_role(
+                    keystone.add_tenant_user_role(
                         request,
                         project=project_id,
                         user=user_id,
@@ -293,7 +293,7 @@ class UpdateProject(workflows.Workflow):
     def _remove_roles_from_user(self, request, project_id, user_id,
                                 current_role_ids):
         for id_to_delete in current_role_ids:
-            api.keystone.remove_tenant_user_role(
+            keystone.remove_tenant_user_role(
                 request,
                 project=project_id,
                 user=user_id,
@@ -335,7 +335,7 @@ class UpdateProject(workflows.Workflow):
             available_roles = self._get_available_roles(request)
             # Get the users currently associated with this project so we
             # can diff against it.
-            users_roles = api.keystone.get_project_users_roles(
+            users_roles = keystone.get_project_users_roles(
                 request, project=project_id)
             users_to_modify = len(users_roles)
 
@@ -366,7 +366,7 @@ class UpdateProject(workflows.Workflow):
                 field_name = member_step.get_member_field_name(role.id)
                 for user_id in set(data[field_name]):
                     if user_id not in users_roles:
-                        api.keystone.add_tenant_user_role(request,
+                        keystone.add_tenant_user_role(request,
                                                           project=project_id,
                                                           user=user_id,
                                                           role=role.id)
@@ -391,7 +391,7 @@ class UpdateProject(workflows.Workflow):
     def _get_project(self, request, data):
         try:
             project_id = data['project_id']
-            return api.keystone.tenant_get(
+            return keystone.tenant_get(
                 request,
                 project_id)
         except Exception:
