@@ -115,7 +115,7 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         try:
             if request.method == "POST":
                 field_name = self.get_member_field_name(default_role.id)
-                for user_id in set(request.POST[field_name]):
+                for user_id in set(request.POST.getlist(field_name)):
                     try:
                         user = keystone_api.user_get(request, user_id)
                         all_users.append(user)
