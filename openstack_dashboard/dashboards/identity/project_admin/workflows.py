@@ -114,8 +114,13 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
         all_users = []
         try:
             if request.method == "POST":
-                all_users = keystone_api.user_list(request,
-                                                   domain=domain_id)
+                field_name = self.get_member_field_name(default_role.id)
+                for user_id in set(request.POST[field_name]):
+                    try:
+                        user = keystone_api.user_get(request, user_id)
+                    except Exception:
+                        pass
+                    all_users.append(user)
             else:
                 all_users = keystone_api.user_list(request,
                                                    domain=domain_id,
