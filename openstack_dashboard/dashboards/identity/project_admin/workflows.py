@@ -118,9 +118,9 @@ class UpdateProjectMembersAction(workflows.MembershipAction):
                 for user_id in set(request.POST[field_name]):
                     try:
                         user = keystone_api.user_get(request, user_id)
+                        all_users.append(user)
                     except Exception:
                         pass
-                    all_users.append(user)
             else:
                 all_users = keystone_api.user_list(request,
                                                    domain=domain_id,
