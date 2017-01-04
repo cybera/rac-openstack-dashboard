@@ -386,8 +386,7 @@ class UpdateProject(workflows.Workflow):
                 group_msg = ""
             exceptions.handle(request,
                               _('Failed to modify %(users_to_modify)s'
-                                ' project members%(group_msg)s and '
-                                'update project quotas.')
+                                ' project members%(group_msg)s.')
                               % {'users_to_modify': users_to_modify,
                                  'group_msg': group_msg})
             return False
