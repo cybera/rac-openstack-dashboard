@@ -30,7 +30,7 @@ class ProjectAdmin(horizon.Panel):
         tenants = api.keystone.tenant_list(request, user=user, admin=False)
 
         for t in tenants:
-           roles = api.keystone.roles_for_user(request, user, project=t)
+           roles = api.keystone.roles_for_user(request, user, project=t.id)
            for r in roles:
                if r.name == 'Project Admin':
                    return True
