@@ -36,6 +36,8 @@ from openstack_dashboard.dashboards.identity.project_admin \
     import tables as project_tables
 from openstack_dashboard.dashboards.identity.project_admin \
     import workflows as project_workflows
+from openstack_dashboard.dashboards.identity.project_admin \
+    import keystone as keystone_api
 from openstack_dashboard.dashboards.project.overview \
     import views as project_views
 
@@ -91,7 +93,7 @@ class IndexView(tables.DataTableView):
 
                 for t in user_tenants:
                     try:
-                        roles = keystone_api.roles_for_user(request, request.user, project=t.id)
+                        roles = keystone_api.roles_for_user(self.request, self.request.user.id, project=t.id)
                         for r in roles:
                             if r.name == 'Project Admin':
                                 tenants.append(t)
