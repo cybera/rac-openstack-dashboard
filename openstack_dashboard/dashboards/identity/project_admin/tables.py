@@ -34,8 +34,6 @@ class UpdateMembersLink(tables.LinkAction):
     url = "horizon:identity:project_admin:update"
     classes = ("ajax-modal",)
     icon = "pencil"
-    policy_rules = (("identity", "identity:list_users"),
-                    ("identity", "identity:list_roles"))
 
     def get_link_url(self, project):
         step = 'update_members'
