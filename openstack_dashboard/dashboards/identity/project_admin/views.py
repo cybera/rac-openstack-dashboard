@@ -47,7 +47,7 @@ PROJECT_INFO_FIELDS = ("domain_id",
                        "description",
                        "enabled")
 
-INDEX_URL = "horizon:identity:projects:index"
+INDEX_URL = "horizon:identity:project_admin:index"
 
 
 class TenantContextMixin(object):
