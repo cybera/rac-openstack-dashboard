@@ -79,26 +79,24 @@ class IndexView(tables.DataTableView):
             project_tables.TenantsTable._meta.pagination_param, None)
         domain_context = self.request.session.get('domain_context', None)
         self._more = False
-        if policy.check((("identity", "identity:list_projects"),),
-                        self.request):
-            try:
-                tenants, self._more = api.keystone.tenant_list(
-                    self.request,
-                    domain=domain_context,
-                    paginate=True,
-                    marker=marker)
-            except Exception:
-                exceptions.handle(self.request,
-                                  _("Unable to retrieve project list."))
-        elif policy.check((("identity", "identity:list_user_projects"),),
+        if policy.check((("identity", "identity:list_user_projects"),),
                           self.request):
             try:
-                tenants, self._more = api.keystone.tenant_list(
+                user_tenants, self._more = api.keystone.tenant_list(
                     self.request,
                     user=self.request.user.id,
                     paginate=True,
                     marker=marker,
                     admin=False)
+
+                for t in user_tenants:
+                    try:
+                        roles = keystone_api.roles_for_user(request, request.user, project=t.id)
+                        for r in roles:
+                            if r.name == 'Project Admin':
+                                tenants.append(t)
+                    except Exception:
+                        pass
             except Exception:
                 exceptions.handle(self.request,
                                   _("Unable to retrieve project information."))
