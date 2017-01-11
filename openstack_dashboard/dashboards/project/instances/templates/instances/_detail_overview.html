@@ -41,6 +41,8 @@
     <dd>{{ instance.created|parse_isotime|timesince }}</dd>
     <dt>{% trans "Host" %}</dt>
     <dd>{{ instance.host_server|default:_("-") }}</dd>
+    <dt>{% trans "Host ID" %}</dt>
+    <dd>{{ instance.hostId|default:_("-") }}</dd>
   </dl>
 </div>
 

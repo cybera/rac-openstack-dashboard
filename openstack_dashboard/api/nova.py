@@ -94,7 +94,7 @@ class Server(base.APIResourceWrapper):
               'tenant_id', 'user_id', 'created', 'OS-EXT-STS:power_state',
               'OS-EXT-STS:task_state', 'OS-EXT-SRV-ATTR:instance_name',
               'OS-EXT-SRV-ATTR:host', 'OS-EXT-AZ:availability_zone',
-              'OS-DCF:diskConfig']
+              'OS-DCF:diskConfig', 'hostId']
 
     def __init__(self, apiresource, request):
         super(Server, self).__init__(apiresource)
