@@ -7,6 +7,8 @@ from django import http
 from horizon.utils import csvbase
 from horizon import tabs
 
+from openstack_dashboard import api
+
 from .tabs import RACUsageTabs
 import requests
 
@@ -39,8 +41,16 @@ class RACProjectData(TemplateView):
 class RACInstanceData(TemplateView):
     def get(self, request, *args, **kwargs):
         from_date = self.request.GET.get('from', '7d')
+
         instance_id = self.request.GET.get('instance', False)
+        instances, foo = api.nova.server_list(self.request)
+        if len([x for x in instances if x.id == instance_id]) == 0:
+            return None
+
         data_format = self.request.GET.get('format', False)
+        if data_format not in ['csv', 'json', False]:
+            return None
+
         project_id = self.request.user.tenant_id
         base_url = 'http://yyc-graphite.cloud.cybera.ca/render?from=-%s&width=800&format=%s&target=' % (from_date, data_format)
         query_results = {}
