@@ -7,6 +7,51 @@ import json
 import MySQLdb
 import requests
 
+limit_names = {
+    'cores': 'maxTotalCores',
+    'instances': 'maxTotalInstances',
+    'ram': 'maxTotalRAMSize',
+    'server_groups': 'maxServerGroups',
+
+    'floatingip': 'maxTotalFloatingIps',
+    'security_group': 'maxSecurityGroups',
+    'security_group_rule': 'maxSecurityGroupRules',
+
+    'gigabytes': 'maxTotalVolumeGigabytes',
+    'snapshots': 'totalSnapshotsUsed',
+    'volumes': 'maxTotalVolumes',
+
+    'object_mb': 'object_storage_quota'
+}
+
+limit_defaults = {
+    'cores': 8,
+    'instances': 8,
+    'ram': 8192,
+    'floatingip': 1,
+    'security_group': 10,
+    'volumes': 10,
+    'gigabytes': 500,
+    'object_mb': 1048576,
+}
+
+usage_names = {
+    'cores': 'totalCoresUsed',
+    'instances': 'totalInstancesUsed',
+    'ram': 'totalRAMUsed',
+    'server_groups': 'totalServerGroupsUsed',
+
+    'floatingip': 'totalFloatingIpsUsed',
+    'security_group': 'totalSecurityGroupsUsed',
+    'security_group_rule': 'totalSecurityGroupUsed',
+
+    'gigabytes': 'totalGigabytesUsed',
+    'volumes': 'totalVolumesUsed',
+    'snapshots': 'totalSnapshotsUsed',
+
+    'object_mb': 'object_storage_used'
+}
+
 def _dbconnect():
     username = getattr(settings, 'RAC_MYSQL_USERNAME')
     password = getattr(settings, 'RAC_MYSQL_PASSWORD')
@@ -42,6 +87,51 @@ def set_instance_lease(instance_id, project_id, region, lease):
         db.commit()
     except Exception as e:
         print(str(e))
+
+def get_master_quotas(request):
+    quotas = {}
+    try:
+        db = _dbconnect()
+        c = db.cursor()
+        query = "SELECT resource, quota from quotas where project_id = %s"
+        data = (request.user.tenant_id)
+        c.execute(query, data)
+        rows = c.fetchall()
+        for row in rows:
+            quotas[row[0]] = row[1]
+        return quotas
+    except MySQLdb.Error, e:
+        print(str(e))
+        return None
+
+def get_rac_usage(request):
+    usage = {}
+    try:
+        db = _dbconnect()
+        c = db.cursor()
+        query = "select resource, sum(in_use) as in_use from resource_usage where project_id = %s group by resource"
+        data = (request.user.tenant_id)
+        c.execute(query, data)
+        rows = c.fetchall()
+        for row in rows:
+            usage[row[0]] = row[1]
+        return usage
+    except MySQLdb.Error, e:
+        print(str(e))
+        return None
+
+def generate_limits(request):
+    limits = {}
+    for default, limit in limit_defaults.iteritems():
+        limits[limit_names[default]] = limit
+    for resource, quota in get_master_quotas(request).iteritems():
+        if resource in limit_names:
+            limits[limit_names[resource]] = int(quota)
+    for resource, in_use in get_rac_usage(request).iteritems():
+        if resource in usage_names:
+            limits[usage_names[resource]] = int(in_use)
+    limits['object_storage_used'] = get_swift_usage(request)
+    return limits
 
 def get_swift_quota(request):
     if not base.is_service_enabled(request, "object-store"):

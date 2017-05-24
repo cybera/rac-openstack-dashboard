@@ -24,6 +24,9 @@ from horizon import messages
 from openstack_dashboard import api
 from openstack_dashboard.usage import quotas
 
+# jt
+from openstack_dashboard.api import jt
+
 
 class BaseUsage(object):
     show_terminated = False
@@ -190,12 +193,15 @@ class BaseUsage(object):
 
     def get_limits(self):
         try:
-            self.limits = api.nova.tenant_absolute_limits(self.request)
+            # jt
+            #self.limits = api.nova.tenant_absolute_limits(self.request)
+            self.limits = jt.generate_limits(self.request)
         except Exception:
             exceptions.handle(self.request,
                               _("Unable to retrieve limit information."))
-        self.get_neutron_limits()
-        self.get_cinder_limits()
+        # jt
+        #self.get_neutron_limits()
+        #self.get_cinder_limits()
 
     def get_usage_list(self, start, end):
         return []

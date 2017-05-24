@@ -26,9 +26,6 @@ from horizon import views
 
 from openstack_dashboard import usage
 
-# JT
-from openstack_dashboard.api import jt
-
 class ProjectUsageCsvRenderer(csvbase.BaseCsvResponse):
 
     columns = [_("Instance Name"), _("VCPUs"), _("RAM (MB)"),
@@ -55,13 +52,6 @@ class ProjectOverview(usage.UsageView):
 
     def get_data(self):
         super(ProjectOverview, self).get_data()
-
-        # JT
-        quota = jt.get_swift_quota(self.request)
-        used = jt.get_swift_usage(self.request)
-        self.usage.limits['object_storage_quota'] = quota
-        self.usage.limits['object_storage_used'] = used
-
         return self.usage.get_instances()
 
 
