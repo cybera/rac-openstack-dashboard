@@ -134,6 +134,8 @@ class IndexView(tables.DataTableView):
             for t in tenants:
                 t.domain_name = domain_lookup.get(t.domain_id)
 
+        # jt
+        tenants.sort(key=lambda x: x.name.lower())
         return tenants
 
 

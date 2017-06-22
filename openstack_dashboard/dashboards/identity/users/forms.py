@@ -62,6 +62,9 @@ class BaseUserForm(forms.SelfHandlingForm):
         super(BaseUserForm, self).__init__(request, *args, **kwargs)
 
         # Populate project choices
+        # jt
+        #project_choices = []
+        project_header = [('', _("Select a project"))]
         project_choices = []
 
         # If the user is already set (update action), list only projects which
@@ -87,6 +90,8 @@ class BaseUserForm(forms.SelfHandlingForm):
             # the default project, then this condition should be removed.
             elif default_project_id is None:
                 project_choices.insert(0, ('', _("Select a project")))
+            # jt
+            project_choices.sort(key=lambda x: x[1])
             self.fields['project'].choices = project_choices
 
         except Exception:
