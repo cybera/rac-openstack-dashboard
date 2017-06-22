@@ -33,7 +33,7 @@ def get_user_home(user):
     # Domain Admin, Project Admin will default to identity
     if token.project.get('id') is None or user.is_superuser:
         try:
-            dashboard = horizon.get_dashboard('identity')
+            dashboard = horizon.get_dashboard('project')
         except base.NotRegistered:
             pass
     else:
