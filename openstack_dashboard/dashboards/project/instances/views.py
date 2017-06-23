@@ -52,6 +52,11 @@ from openstack_dashboard.dashboards.project.instances \
 from openstack_dashboard.dashboards.project.instances \
     import workflows as project_workflows
 
+# jt
+import datetime
+from dateutil import parser
+from openstack_dashboard.api import jt
+
 LOG = logging.getLogger(__name__)
 
 
@@ -380,6 +385,24 @@ class DetailView(tabs.TabView):
                     'instance "%(name)s" (%(id)s).') % {'name': instance.name,
                                                         'id': instance_id}
             exceptions.handle(self.request, msg, ignore=True)
+
+        # jt
+        if jt.is_leased_flavor(instance.full_flavor.name):
+            project_id = self.request.user.tenant_id
+            region = self.request.user.services_region
+            instance.leased = True
+
+            if self.request.GET.get('lease_time', False):
+                lease_time = int(self.request.GET.get('lease_time'))
+                new_lease = datetime.datetime.now() + datetime.timedelta(days=lease_time)
+                jt.set_instance_lease(instance.id, project_id, region, new_lease)
+
+            lease_date = jt.get_instance_lease(instance.id, project_id, region)
+            if lease_date is None:
+                lease_date = parser.parse(instance.created)+datetime.timedelta(days=1)
+            instance.lease_date = lease_date
+        else:
+            instance.leased = False
 
         return instance
 

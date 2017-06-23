@@ -1,5 +1,26 @@
 {% load i18n sizeformat %}
 
+{% if instance.leased %}
+<div class="status detail">
+  <h4>Lease Information</h4>
+  <hr class="header_rule">
+  <dl class="dl-horizontal">
+    <dt>Lease Date</dt>
+    <dd>{{ instance.lease_date }}</dt>
+    <dt>Extend Lease For</dt>
+    <dd>
+      <form name="extend_lease" method="GET" action="">
+        <select name="lease_time">
+          <option value="1">1 day</option>
+          <option value="3">3 days</option>
+        </select>
+        <input type="submit">
+      </form>
+    </dd>
+  </dl>
+</div>
+{% endif %}
+
 <div class="detail">
   <dl class="dl-horizontal">
     <dt>{% trans "Name" %}</dt>
