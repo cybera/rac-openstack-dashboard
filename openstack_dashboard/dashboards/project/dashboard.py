@@ -16,6 +16,10 @@ from django.utils.translation import ugettext_lazy as _
 
 import horizon
 
+class RACUsagePanels(horizon.PanelGroup):
+    slug = "rac_usage"
+    name = "RAC Usage"
+    panels = ('rac_usage',)
 
 class Project(horizon.Dashboard):
     name = _("Project")

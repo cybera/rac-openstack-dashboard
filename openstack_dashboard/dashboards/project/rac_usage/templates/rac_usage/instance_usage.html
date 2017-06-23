@@ -1,0 +1,38 @@
+<form name="instance_usage" method="GET" action="index">
+  <select name="from" style="margin-top: 10px; padding-left: 5px; padding-right: 15px">
+    {% for from_label, from_value in time %}
+      {% if from_value == request.GET.from %}
+        <option selected value="{{ from_value }}">{{ from_label }}</option>
+      {% else %}
+        <option value="{{ from_value }}">{{ from_label }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+
+  <select name="from" style="margin-top: 10px; padding-left: 5px; padding-right: 25px">
+  {% for instance in instances %}
+    {% if instance.id == request.GET.instance %}
+      <option selected value="{{ instance.id }}">{{ instance.name }}</option>
+    {% else %}
+      <option value="{{ instance.id }}">{{ instance.name }}</option>
+    {% endif %}
+  {% endfor %}
+  </select>
+
+  <input type="hidden" name="tab" value="rac_usage__instances">
+
+  <input type="submit">
+</form>
+
+{% if request.GET.instance %}
+{% for query_title, query in queries %}
+<h3>{{ query_title }}</h3>
+<img src="instance_data?query={{ query }}&instance={{ request.GET.instance }}&from={{ request.GET.from }}">
+<br>
+<br>
+(<a href="instance_data?query={{ query }}&instance={{ request.GET.instance }}&from={{ request.GET.from }}&format=json">JSON</a>)
+(<a href="instance_data?query={{ query }}&instance={{ request.GET.instance }}&from={{ request.GET.from }}&format=csv">CSV</a>)
+<br>
+<hr>
+{% endfor %}
+{% endif %}

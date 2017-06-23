@@ -1,0 +1,25 @@
+<form name="project_allocation" method="GET" action="#">
+  <select name="from" style="margin-top: 10px; padding-left: 5px; padding-right: 15px">
+    {% for from_label, from_value in time %}
+      {% if from_value == request.GET.from %}
+        <option selected value="{{ from_value }}">{{ from_label }}</option>
+      {% else %}
+        <option value="{{ from_value }}">{{ from_label }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+  <input type="submit">
+</form>
+
+<p>The following shows allocate usage of the cloud. It does not reflect actual usage of instances.</p>
+
+{% for query_title, query in queries %}
+<h3>{{ query_title }}</h3>
+<img src="project_data?query={{ query }}&from={{ request.GET.from }}">
+<br>
+<br>
+(<a href="project_data?query={{ query }}&from={{ request.GET.from }}&format=json">JSON</a>)
+(<a href="project_data?query={{ query }}&from={{ request.GET.from }}&format=csv">CSV</a>)
+<br>
+<hr>
+{% endfor %}
