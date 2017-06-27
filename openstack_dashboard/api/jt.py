@@ -163,3 +163,29 @@ def get_swift_usage(request):
         pass
     finally:
         return usage_mb
+
+def get_notice(project_id):
+    try:
+        db = _dbconnect()
+        c = db.cursor()
+        query = "SELECT notice from project_information where project_id = %s"
+        data = [project_id]
+        c.execute(query, data)
+        notice = c.fetchone()
+        if notice is not None:
+            return notice[0]
+        return ""
+    except MySQLdb.Error, e:
+        print(str(e))
+        return ""
+
+def set_notice(project_id, notice):
+    try:
+        db = _dbconnect()
+        c = db.cursor()
+        query = "INSERT INTO project_information (project_id, notice) VALUES (%s, %s) ON DUPLICATE KEY UPDATE notice = %s"
+        data = (project_id, notice, notice)
+        c.execute(query, data)
+        db.commit()
+    except Exception as e:
+        print(str(e))

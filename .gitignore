@@ -1,5 +1,6 @@
 **/*.pyc
 **/*.swp
+openstack_dashboard/static
 openstack_dashboard/enabled/_8001_rac_usage_add_panel_to_group.py
 openstack_dashboard/enabled/_8001_users_add_panel_to_group.py
 openstack_dashboard/enabled/_8000_rac_add_panel_group.py

@@ -26,6 +26,7 @@ from django.conf import settings
 from horizon import conf
 from openstack_dashboard.contrib.developer.profiler import api as profiler
 
+from openstack_dashboard.api import jt
 
 def openstack(request):
     """Context processor necessary for OpenStack Dashboard functionality.
@@ -105,4 +106,11 @@ def openstack(request):
     js_catalog.extend(p for p in all_plugins if not regex.search(p))
     context['JS_CATALOG'] = '+'.join(js_catalog)
 
+    # jt
+    notice = jt.get_notice("admin")
+    print notice
+    context['notice'] = ""
+    if notice != "" and notice != None:
+        context['notice'] = notice
+    print context
     return context

@@ -48,6 +48,38 @@ PROJECT_USER_MEMBER_SLUG = "update_members"
 PROJECT_GROUP_MEMBER_SLUG = "update_group_members"
 COMMON_HORIZONTAL_TEMPLATE = "identity/projects/_common_horizontal_form.html"
 
+# jt
+def get_admin_tenant_id(request):
+    tenants = api.keystone.tenant_list(request)[0]
+    admin_tenant_id = [tenant.id for tenant in tenants if tenant.name == 'admin'][0]
+    return admin_tenant_id
+
+# jt
+class UpdateRACAction(workflows.Action):
+    notice = forms.CharField(max_length=750, label=_("RAC Notice"), required=False)
+
+    def __init__(self, request, *args, **kwargs):
+        super(UpdateRACAction, self).__init__(request, *args, **kwargs)
+
+        if 'project_id' in args[0]:
+            project_id = args[0]['project_id']
+            admin_tenant_id = get_admin_tenant_id(request)
+            if project_id == admin_tenant_id:
+                project_id = "admin"
+
+            self.fields['notice'].initial = api.jt.get_notice(project_id)
+        else:
+            self.fields['notice'].initial = ''
+    class Meta:
+        name = _("RAC")
+        slug = 'update_rac'
+        help_test = _("From here you can set RAC information for projects.")
+
+class UpdateRAC(workflows.Step):
+    action_class = UpdateRACAction
+    depends_on = ('project_id',)
+    contributes = ('notice',)
+
 
 class ProjectQuotaAction(workflows.Action):
     ifcb_label = _("Injected File Content (Bytes)")
@@ -442,7 +474,10 @@ class CreateProject(CommonQuotaWorkflow):
     success_url = "horizon:identity:projects:index"
     default_steps = (CreateProjectInfo,
                      UpdateProjectMembers,
-                     CreateProjectQuota)
+                     # jt
+                     #CreateProjectQuota)
+                     CreateProjectQuota,
+                     UpdateRAC)
 
     def __init__(self, request=None, context_seed=None, entry_point=None,
                  *args, **kwargs):
@@ -450,7 +485,10 @@ class CreateProject(CommonQuotaWorkflow):
             self.default_steps = (CreateProjectInfo,
                                   UpdateProjectMembers,
                                   UpdateProjectGroups,
-                                  CreateProjectQuota)
+                                  # jt
+                                  #CreateProjectQuota)
+                                  CreateProjectQuota,
+                                  UpdateRAC)
         super(CreateProject, self).__init__(request=request,
                                             context_seed=context_seed,
                                             entry_point=entry_point,
@@ -654,7 +692,10 @@ class UpdateProject(CommonQuotaWorkflow):
     success_url = "horizon:identity:projects:index"
     default_steps = (UpdateProjectInfo,
                      UpdateProjectMembers,
-                     UpdateProjectQuota)
+                     # jt
+                     #UpdateProjectQuota)
+                     UpdateProjectQuota,
+                     UpdateRAC)
 
     def __init__(self, request=None, context_seed=None, entry_point=None,
                  *args, **kwargs):
@@ -662,7 +703,10 @@ class UpdateProject(CommonQuotaWorkflow):
             self.default_steps = (UpdateProjectInfo,
                                   UpdateProjectMembers,
                                   UpdateProjectGroups,
-                                  UpdateProjectQuota)
+                                  # jt
+                                  #UpdateProjectQuota)
+                                  UpdateProjectQuota,
+                                  UpdateRAC)
 
         super(UpdateProject, self).__init__(request=request,
                                             context_seed=context_seed,
@@ -959,6 +1003,11 @@ class UpdateProject(CommonQuotaWorkflow):
             if not ret:
                 return False
 
+        notice_project_id = project_id
+        admin_tenant_id = get_admin_tenant_id(request)
+        if admin_tenant_id == project_id:
+            notice_project_id = "admin"
+        api.jt.set_notice(notice_project_id, data['notice'])
         return True
 
 
